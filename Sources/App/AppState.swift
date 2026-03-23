@@ -105,7 +105,10 @@ final class AppState: ObservableObject {
     }
 
     func generateReport() {
-        // Placeholder — Task 7 will implement PDF report generation
-        print("[InkPulse] Report generation not yet implemented.")
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let dateStr = formatter.string(from: Date())
+        let heartbeatFile = InkPulseDefaults.heartbeatDir.appendingPathComponent("heartbeat-\(dateStr).jsonl")
+        _ = ReportGenerator.generate(from: heartbeatFile)
     }
 }
