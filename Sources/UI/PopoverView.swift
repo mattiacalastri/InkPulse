@@ -41,20 +41,17 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 10) {
             // Header
             HStack {
-                Text("InkPulse")
+                Text("🐙 InkPulse")
                     .font(.headline)
                     .fontWeight(.bold)
                 Spacer()
                 if aggregateHealth >= 0 {
-                    Circle()
-                        .fill(healthColor(for: aggregateHealth))
-                        .frame(width: 10, height: 10)
                     Text("\(aggregateHealth)")
-                        .font(.system(.body, design: .monospaced))
+                        .font(.system(.title2, design: .rounded))
                         .fontWeight(.bold)
                         .foregroundStyle(healthColor(for: aggregateHealth))
                 } else {
-                    Text("idle")
+                    Text("😴 idle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -72,7 +69,10 @@ struct PopoverView: View {
                 ScrollView {
                     VStack(spacing: 4) {
                         ForEach(sortedSessions, id: \.sessionId) { snap in
-                            SessionRowView(snapshot: snap)
+                            SessionRowView(
+                                snapshot: snap,
+                                filePath: appState.sessionFilePaths[snap.sessionId]
+                            )
                         }
                     }
                 }

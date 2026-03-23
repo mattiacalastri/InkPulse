@@ -27,49 +27,144 @@ func healthColor(for score: Int) -> Color {
     }
 }
 
+// MARK: - Agent Mood
+
+/// Derives an emoji mood from the snapshot metrics. Pure function, no new state.
+func agentMood(for snap: MetricsSnapshot) -> (emoji: String, status: String) {
+    let idle = Date().timeIntervalSince(snap.lastEventTime)
+
+    // Sleeping — no events for >2 min
+    if idle > 120 {
+        return ("😴", "sleeping")
+    }
+
+    // Stalled — idle >30s
+    if idle > 30 || snap.idleAvgS > 30 {
+        return ("🧊", "stalled")
+    }
+
+    // Anomaly states
+    if let anomaly = snap.anomaly {
+        switch anomaly {
+        case "loop": return ("🔄", "looping")
+        case "stall": return ("🧊", "stalled")
+        case "hemorrhage": return ("💸", "burning tokens")
+        case "explosion": return ("🐙", "spawning \(snap.subagentCount) agents")
+        case "deep_thinking": return ("🧠", "thinking deeply")
+        default: break
+        }
+    }
+
+    // Spawning many agents
+    if snap.subagentCount > 3 {
+        return ("🐙", "orchestrating \(snap.subagentCount) agents")
+    }
+
+    // High speed
+    if snap.tokenMin > 800 && snap.errorRate < 0.05 {
+        return ("⚡", "forging fast")
+    }
+
+    // High cache efficiency
+    if snap.cacheHit > 0.95 {
+        return ("🦊", "efficient")
+    }
+
+    // Struggling
+    if snap.errorRate > 0.10 {
+        return ("😤", "struggling")
+    }
+
+    // Normal active
+    if snap.tokenMin > 200 {
+        return ("🔥", "working")
+    }
+
+    // Low activity
+    return ("💭", "idle")
+}
+
+// MARK: - Project Name
+
+/// Derives a readable project name from the JSONL file path.
+/// e.g. ".../-Users-mattiacalastri-btc-predictions/abc.jsonl" → "btc-predictions"
+/// e.g. ".../-Users-mattiacalastri/abc.jsonl" → "Home"
+func projectName(from sessionId: String, filePath: String?) -> String {
+    guard let path = filePath else {
+        return String(sessionId.prefix(8))
+    }
+
+    // Extract the project directory name from the path
+    let components = path.components(separatedBy: "/")
+    // Find the component after "projects"
+    if let idx = components.firstIndex(of: "projects"), idx + 1 < components.count {
+        let projectDir = components[idx + 1]
+        // Strip the "-Users-username" prefix
+        let parts = projectDir.components(separatedBy: "-")
+        // Pattern: "-Users-username" or "-Users-username-project-name"
+        if parts.count > 3 {
+            // Has project suffix: "-Users-mattiacalastri-btc-predictions" → "btc-predictions"
+            let userParts = 3 // "-", "Users", "username"
+            let projectParts = Array(parts.dropFirst(userParts))
+            return projectParts.joined(separator: "-")
+        } else {
+            return "Home"
+        }
+    }
+
+    return String(sessionId.prefix(8))
+}
+
 // MARK: - SessionRowView
 
 struct SessionRowView: View {
     let snapshot: MetricsSnapshot
+    let filePath: String?
 
     var body: some View {
+        let mood = agentMood(for: snapshot)
+        let name = projectName(from: snapshot.sessionId, filePath: filePath)
+
         HStack(spacing: 8) {
-            // Health color dot
-            Circle()
-                .fill(healthColor(for: snapshot.health))
-                .frame(width: 8, height: 8)
+            // Emoji mood
+            Text(mood.emoji)
+                .font(.title3)
 
-            // Session ID (first 8 chars)
-            let shortId = String(snapshot.sessionId.prefix(8)) + "..."
-            Text(shortId)
-                .font(.system(.caption, design: .monospaced))
-                .lineLimit(1)
+            // Name + status
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name)
+                    .font(.system(.caption, design: .rounded))
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
 
-            // Model short name (strip "claude-")
-            let shortModel = snapshot.model.replacingOccurrences(of: "claude-", with: "")
-            Text(shortModel)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+                Text(mood.status)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             Spacer()
 
-            // Duration in minutes
-            let durationMin = snapshot.lastEventTime.timeIntervalSince(snapshot.startTime) / 60.0
-            Text("\(Int(durationMin))m")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            // Health bar + score
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(snapshot.health)")
+                    .font(.system(.caption, design: .monospaced))
+                    .fontWeight(.bold)
+                    .foregroundStyle(healthColor(for: snapshot.health))
 
-            // Cost EUR
-            Text(String(format: "€%.2f", snapshot.costEUR))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-
-            // Health score number
-            Text("\(snapshot.health)")
-                .font(.system(.caption, design: .monospaced))
-                .fontWeight(.bold)
-                .foregroundStyle(healthColor(for: snapshot.health))
+                // Mini health bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.gray.opacity(0.2))
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(healthColor(for: snapshot.health))
+                            .frame(width: geo.size.width * CGFloat(max(0, min(snapshot.health, 100))) / 100.0)
+                    }
+                }
+                .frame(width: 50, height: 4)
+            }
         }
+        .padding(.vertical, 3)
     }
 }
