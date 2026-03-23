@@ -6,6 +6,10 @@ CodexBar tells you how much you spent. InkPulse tells you the **rhythm**.
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue) ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange) ![License MIT](https://img.shields.io/badge/license-MIT-green) ![Tests 20/20](https://img.shields.io/badge/tests-20%2F20-brightgreen)
 
+<p align="center">
+  <img src="docs/images/inkpulse-dashboard.png" alt="InkPulse Dashboard" width="380">
+</p>
+
 ## What it does
 
 InkPulse reads Claude Code's session JSONL files and computes 8 health metrics with sliding windows. A pulsating heart in your menu bar changes color based on agent health.
@@ -104,7 +108,11 @@ All data stays local:
 
 ## Configuration
 
-Click **Config** in the popover for a native settings panel with sliders:
+Click **Config** in the popover for a native settings panel:
+
+<p align="center">
+  <img src="docs/images/inkpulse-settings.png" alt="InkPulse Settings" width="380">
+</p>
 
 - **Refresh Rate** — How often metrics update (0.5-5 Hz)
 - **Heartbeat Interval** — How often snapshots are logged (1-30s)
