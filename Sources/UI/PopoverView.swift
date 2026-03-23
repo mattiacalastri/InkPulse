@@ -3,139 +3,205 @@ import SwiftUI
 struct PopoverView: View {
     @ObservedObject var appState: AppState
 
-    private var sortedSessions: [MetricsSnapshot] {
+    // MARK: - Computed Stats
+
+    private var snaps: [MetricsSnapshot] {
         appState.metricsEngine.sessions.values
             .sorted { $0.lastEventTime > $1.lastEventTime }
     }
 
-    private var aggregateHealth: Int {
-        appState.metricsEngine.aggregateHealth
+    private var health: Int { appState.metricsEngine.aggregateHealth }
+
+    private var totalTokens: Int {
+        let hist = appState.tokenHistory
+        guard !hist.isEmpty else { return 0 }
+        return Int(hist.reduce(0, +) / 60.0 * Double(hist.count)) // rough total
+    }
+
+    private var totalCost: Double {
+        snaps.map(\.costEUR).reduce(0, +)
     }
 
     private var avgCacheHit: Double {
-        let snaps = Array(appState.metricsEngine.sessions.values)
         guard !snaps.isEmpty else { return 0 }
         return snaps.map(\.cacheHit).reduce(0, +) / Double(snaps.count)
     }
 
     private var avgErrorRate: Double {
-        let snaps = Array(appState.metricsEngine.sessions.values)
         guard !snaps.isEmpty else { return 0 }
         return snaps.map(\.errorRate).reduce(0, +) / Double(snaps.count)
     }
 
-    private var avgThinkRatio: Double {
-        let snaps = Array(appState.metricsEngine.sessions.values)
-        let ratios = snaps.compactMap(\.thinkOutputRatio)
-        guard !ratios.isEmpty else { return 0 }
-        return ratios.reduce(0, +) / Double(ratios.count)
+    private var totalAgents: Int {
+        snaps.map(\.subagentCount).reduce(0, +)
     }
 
-    private var totalAgents: Int {
-        appState.metricsEngine.sessions.values
-            .map(\.subagentCount)
-            .reduce(0, +)
+    private var peakTokenMin: Double {
+        appState.tokenHistory.max() ?? 0
     }
+
+    private var avgTokenMin: Double {
+        let h = appState.tokenHistory
+        guard !h.isEmpty else { return 0 }
+        return h.reduce(0, +) / Double(h.count)
+    }
+
+    private var uptimeMin: Double {
+        guard let earliest = snaps.map(\.startTime).min() else { return 0 }
+        return Date().timeIntervalSince(earliest) / 60.0
+    }
+
+    private var throughputPerAgent: Double {
+        guard !snaps.isEmpty else { return 0 }
+        return avgTokenMin / Double(snaps.count)
+    }
+
+    // MARK: - Body
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Header
-            HStack {
-                Text("🐙 InkPulse")
-                    .font(.headline)
-                    .fontWeight(.bold)
-                Spacer()
-                if aggregateHealth >= 0 {
-                    Text("\(aggregateHealth)")
-                        .font(.system(.title2, design: .rounded))
+        VStack(alignment: .leading, spacing: 0) {
+
+            // ── HEADER ──
+            HStack(alignment: .center) {
+                Text("🐙")
+                    .font(.title)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("InkPulse")
+                        .font(.system(.headline, design: .rounded))
                         .fontWeight(.bold)
-                        .foregroundStyle(healthColor(for: aggregateHealth))
+                    Text("\(snaps.count) agents · \(Int(uptimeMin))m uptime")
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if health >= 0 {
+                    VStack(alignment: .trailing, spacing: 0) {
+                        Text("\(health)")
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .foregroundStyle(healthColor(for: health))
+                        Text("HEALTH")
+                            .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
-                    Text("😴 idle")
+                    Text("IDLE")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
+            .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 6)
 
-            Divider()
+            // ── STATS STRIP ──
+            HStack(spacing: 0) {
+                statCell("tok/min", String(format: "%.0f", avgTokenMin), color: .primary)
+                statDivider()
+                statCell("peak", String(format: "%.0f", peakTokenMin), color: Color(hex: "#00d4aa"))
+                statDivider()
+                statCell("cache", String(format: "%.0f%%", avgCacheHit * 100), color: avgCacheHit > 0.8 ? Color(hex: "#00d4aa") : Color(hex: "#FFA500"))
+                statDivider()
+                statCell("err", String(format: "%.1f%%", avgErrorRate * 100), color: avgErrorRate < 0.05 ? Color(hex: "#00d4aa") : Color(hex: "#FF4444"))
+                statDivider()
+                statCell("cost", String(format: "€%.2f", totalCost), color: .primary)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(Color.primary.opacity(0.03))
 
-            // Session list
-            if sortedSessions.isEmpty {
-                Text("No active sessions")
+            // ── ECG ──
+            if !appState.tokenHistory.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text("ECG")
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("tok/min · \(appState.tokenHistory.count)s window")
+                            .font(.system(size: 8, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                    }
+                    SparklineView(
+                        data: appState.tokenHistory,
+                        color: Color(hex: "#00d4aa")
+                    )
+                    .frame(height: 44)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 6)
+            }
+
+            Divider().padding(.horizontal, 8)
+
+            // ── AGENTS ──
+            if snaps.isEmpty {
+                Text("No active agents")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 12)
             } else {
                 ScrollView {
-                    VStack(spacing: 4) {
-                        ForEach(sortedSessions, id: \.sessionId) { snap in
+                    VStack(spacing: 2) {
+                        ForEach(snaps, id: \.sessionId) { snap in
                             SessionRowView(
                                 snapshot: snap,
                                 filePath: appState.sessionFilePaths[snap.sessionId]
                             )
                         }
                     }
+                    .padding(.horizontal, 12).padding(.vertical, 6)
                 }
-                .frame(maxHeight: 200)
+                .frame(maxHeight: 220)
             }
 
-            Divider()
+            Divider().padding(.horizontal, 8)
 
-            // ECG Sparkline
-            if !appState.tokenHistory.isEmpty {
-                SparklineView(
-                    data: appState.tokenHistory,
-                    color: Color(hex: "#00d4aa")
-                )
-                .frame(height: 40)
-
-                Divider()
+            // ── BOTTOM BAR ──
+            HStack(spacing: 0) {
+                statMini("agents", "\(totalAgents)")
+                statMini("sessions", "\(snaps.count)")
+                statMini("tok/agent", String(format: "%.0f", throughputPerAgent))
+                Spacer()
+                Button("Report") { appState.generateReport() }
+                    .buttonStyle(.borderless)
+                    .font(.caption2)
+                Button(appState.isPaused ? "▶" : "⏸") { appState.togglePause() }
+                    .buttonStyle(.borderless)
+                    .font(.caption2)
+                Button("⚙") { appState.openConfig() }
+                    .buttonStyle(.borderless)
+                    .font(.caption2)
             }
-
-            // Metrics grid 2x2
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    metricLabel("Cache", String(format: "%.0f%%", avgCacheHit * 100))
-                    metricLabel("Think:Out", String(format: "%.1f", avgThinkRatio))
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    metricLabel("Errors", String(format: "%.1f%%", avgErrorRate * 100))
-                    metricLabel("Agents", "\(totalAgents)")
-                }
-            }
-
-            Divider()
-
-            // Actions
-            HStack(spacing: 8) {
-                Button("Report") {
-                    appState.generateReport()
-                }
-                .buttonStyle(.bordered)
-
-                Button(appState.isPaused ? "Resume" : "Pause") {
-                    appState.togglePause()
-                }
-                .buttonStyle(.bordered)
-
-                Button("Edit Config") {
-                    appState.openConfig()
-                }
-                .buttonStyle(.bordered)
-            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
         }
-        .padding(12)
-        .frame(width: 320)
+        .frame(width: 340)
     }
 
-    private func metricLabel(_ label: String, _ value: String) -> some View {
-        HStack(spacing: 4) {
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+    // MARK: - Components
+
+    private func statCell(_ label: String, _ value: String, color: Color) -> some View {
+        VStack(spacing: 1) {
             Text(value)
-                .font(.system(.caption, design: .monospaced))
-                .fontWeight(.semibold)
+                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .foregroundStyle(color)
+            Text(label)
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .foregroundStyle(.tertiary)
         }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func statDivider() -> some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.08))
+            .frame(width: 1, height: 28)
+    }
+
+    private func statMini(_ label: String, _ value: String) -> some View {
+        HStack(spacing: 2) {
+            Text(value)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+            Text(label)
+                .font(.system(size: 8, design: .monospaced))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.trailing, 8)
     }
 }
