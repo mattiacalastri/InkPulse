@@ -59,6 +59,14 @@ struct PopoverView: View {
     // MARK: - Body
 
     var body: some View {
+        if appState.showingConfig {
+            ConfigView(appState: appState)
+        } else {
+            mainView
+        }
+    }
+
+    private var mainView: some View {
         VStack(alignment: .leading, spacing: 0) {
 
             // ── HEADER ──
@@ -148,28 +156,59 @@ struct PopoverView: View {
                     }
                     .padding(.horizontal, 12).padding(.vertical, 6)
                 }
-                .frame(maxHeight: 220)
+                .frame(maxHeight: 500)
             }
 
             Divider().padding(.horizontal, 8)
 
-            // ── BOTTOM BAR ──
+            // ── STATS FOOTER ──
             HStack(spacing: 0) {
                 statMini("agents", "\(totalAgents)")
                 statMini("sessions", "\(snaps.count)")
                 statMini("tok/agent", String(format: "%.0f", throughputPerAgent))
                 Spacer()
-                Button("Report") { appState.generateReport() }
-                    .buttonStyle(.borderless)
-                    .font(.caption2)
-                Button(appState.isPaused ? "▶" : "⏸") { appState.togglePause() }
-                    .buttonStyle(.borderless)
-                    .font(.caption2)
-                Button("⚙") { appState.openConfig() }
-                    .buttonStyle(.borderless)
-                    .font(.caption2)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 4)
+
+            Divider().padding(.horizontal, 8)
+
+            // ── ACTIONS ──
+            HStack(spacing: 12) {
+                Button(action: { appState.generateReport() }) {
+                    Label("Report", systemImage: "doc.text.fill")
+                        .font(.system(.caption, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+
+                Button(action: { appState.togglePause() }) {
+                    Label(appState.isPaused ? "Resume" : "Pause", systemImage: appState.isPaused ? "play.fill" : "pause.fill")
+                        .font(.system(.caption, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+
+                Button(action: { appState.openConfig() }) {
+                    Label("Config", systemImage: "gearshape.fill")
+                        .font(.system(.caption, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
+
+            // ── QUIT ──
+            Button(action: { NSApplication.shared.terminate(nil) }) {
+                Label("Quit InkPulse", systemImage: "xmark.circle.fill")
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderless)
+            .padding(.bottom, 6)
         }
         .frame(width: 340)
     }

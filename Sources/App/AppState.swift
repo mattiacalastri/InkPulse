@@ -97,22 +97,10 @@ final class AppState: ObservableObject {
         isPaused.toggle()
     }
 
+    @Published var showingConfig = false
+
     func openConfig() {
-        let configURL = InkPulseDefaults.configFile
-        let fm = FileManager.default
-
-        // Create default config.json if missing
-        if !fm.fileExists(atPath: configURL.path) {
-            try? fm.createDirectory(at: configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let defaultConfig = InkPulseConfig.default
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            if let data = try? encoder.encode(defaultConfig) {
-                try? data.write(to: configURL, options: .atomic)
-            }
-        }
-
-        NSWorkspace.shared.open(configURL)
+        showingConfig.toggle()
     }
 
     func generateReport() {
