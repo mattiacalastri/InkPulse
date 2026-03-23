@@ -150,7 +150,8 @@ struct PopoverView: View {
                         ForEach(snaps, id: \.sessionId) { snap in
                             SessionRowView(
                                 snapshot: snap,
-                                filePath: appState.sessionFilePaths[snap.sessionId]
+                                filePath: appState.sessionFilePaths[snap.sessionId],
+                                cwd: appState.sessionCwds[snap.sessionId]
                             )
                         }
                     }

@@ -7,6 +7,7 @@ final class AppState: ObservableObject {
     @Published var tokenHistory: [Double] = []
     @Published var isPaused = false
         @Published var sessionFilePaths: [String: String] = [:] // sessionId → filePath
+    @Published var sessionCwds: [String: String] = [:] // sessionId → cwd
 
     private var heartbeatLogger: HeartbeatLogger?
     private var sessionWatcher: SessionWatcher?
@@ -79,14 +80,18 @@ final class AppState: ObservableObject {
         AppState.log("heartbeat: \(snaps.count) snapshots, trackers=\(metricsEngine.trackerCount)")
         heartbeatLogger?.logSnapshots(snaps)
 
-        // Save offsets + update file paths for UI
+        // Save offsets + update file paths + cwds for UI
         if let offsets = sessionWatcher?.currentOffsets {
             OffsetCheckpoint.save(offsets)
-            // Map sessionId to filePath for project name resolution
             for (_, entry) in offsets {
                 let url = URL(fileURLWithPath: entry.file)
                 let sessionId = url.deletingPathExtension().lastPathComponent
                 sessionFilePaths[sessionId] = entry.file
+            }
+        }
+        if let cwds = sessionWatcher?.sessionCwds {
+            for (sid, cwd) in cwds {
+                sessionCwds[sid] = cwd
             }
         }
     }

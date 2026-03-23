@@ -8,6 +8,7 @@ final class SessionWatcher {
 
     private var tailers: [String: FileTailer] = [:]  // keyed by file path
     private var timer: Timer?
+    private(set) var sessionCwds: [String: String] = [:]  // sessionId → cwd
 
     init(projectsDir: URL, onNewEvents: @escaping ([ClaudeEvent]) -> Void) {
         self.projectsDir = projectsDir
@@ -111,6 +112,18 @@ final class SessionWatcher {
                 AppState.log("readAll: \(URL(fileURLWithPath: path).lastPathComponent) → \(lines.count) new lines")
             }
             for line in lines {
+                // Extract cwd for session name resolution (cheap string scan)
+                if let cwdRange = line.range(of: "\"cwd\":\""),
+                   let endRange = line[cwdRange.upperBound...].range(of: "\"") {
+                    let cwd = String(line[cwdRange.upperBound..<endRange.lowerBound])
+                    if let sidRange = line.range(of: "\"sessionId\":\""),
+                       let sidEnd = line[sidRange.upperBound...].range(of: "\"") {
+                        let sid = String(line[sidRange.upperBound..<sidEnd.lowerBound])
+                        if sessionCwds[sid] == nil {
+                            sessionCwds[sid] = cwd
+                        }
+                    }
+                }
                 let event = JSONLParser.parse(line: line)
                 if case .unknown = event { continue }
                 allEvents.append(event)

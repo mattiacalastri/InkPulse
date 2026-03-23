@@ -86,32 +86,33 @@ func agentMood(for snap: MetricsSnapshot) -> (emoji: String, status: String) {
 
 // MARK: - Project Name
 
-/// Derives a readable project name from the JSONL file path.
-/// e.g. ".../-Users-mattiacalastri-btc-predictions/abc.jsonl" → "btc-predictions"
-/// e.g. ".../-Users-mattiacalastri/abc.jsonl" → "Home"
-func projectName(from sessionId: String, filePath: String?) -> String {
+/// Derives a readable name from the cwd (working directory) or file path.
+/// Priority: cwd last component → file path project dir → sessionId prefix
+func projectName(from sessionId: String, filePath: String?, cwd: String?) -> String {
+    // Best: use cwd last path component
+    if let cwd = cwd {
+        let last = URL(fileURLWithPath: cwd).lastPathComponent
+        // Map home dir to "Home"
+        if last == NSUserName() || cwd == FileManager.default.homeDirectoryForCurrentUser.path {
+            return "Home"
+        }
+        return last
+    }
+
+    // Fallback: derive from file path
     guard let path = filePath else {
         return String(sessionId.prefix(8))
     }
-
-    // Extract the project directory name from the path
     let components = path.components(separatedBy: "/")
-    // Find the component after "projects"
     if let idx = components.firstIndex(of: "projects"), idx + 1 < components.count {
         let projectDir = components[idx + 1]
-        // Strip the "-Users-username" prefix
         let parts = projectDir.components(separatedBy: "-")
-        // Pattern: "-Users-username" or "-Users-username-project-name"
         if parts.count > 3 {
-            // Has project suffix: "-Users-mattiacalastri-btc-predictions" → "btc-predictions"
-            let userParts = 3 // "-", "Users", "username"
-            let projectParts = Array(parts.dropFirst(userParts))
-            return projectParts.joined(separator: "-")
+            return Array(parts.dropFirst(3)).joined(separator: "-")
         } else {
             return "Home"
         }
     }
-
     return String(sessionId.prefix(8))
 }
 
@@ -120,10 +121,11 @@ func projectName(from sessionId: String, filePath: String?) -> String {
 struct SessionRowView: View {
     let snapshot: MetricsSnapshot
     let filePath: String?
+    let cwd: String?
 
     var body: some View {
         let mood = agentMood(for: snapshot)
-        let name = projectName(from: snapshot.sessionId, filePath: filePath)
+        let name = projectName(from: snapshot.sessionId, filePath: filePath, cwd: cwd)
 
         HStack(spacing: 8) {
             // Emoji mood
