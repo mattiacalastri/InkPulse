@@ -1,0 +1,216 @@
+import Foundation
+
+/// Tracks per-session metrics state, ingesting events and producing snapshots.
+final class SessionMetrics {
+
+    let sessionId: String
+    private(set) var model: String = "unknown"
+    let startTime: Date
+    private(set) var lastEventTime: Date
+
+    // MARK: - Internal Accumulators
+
+    /// Timestamped output token counts for windowed tok/min.
+    private var outputTokenEvents: [(date: Date, tokens: Int)] = []
+
+    /// Timestamped tool-use flags for windowed toolFreq.
+    private var toolEvents: [(date: Date, isError: Bool)] = []
+
+    /// Gaps > 1 s between consecutive events (timestamped by the later event).
+    private var idleGaps: [(date: Date, gap: Double)] = []
+
+    /// Queue operations for subagent tracking.
+    private var enqueueCount: Int = 0
+    private var completeCount: Int = 0
+
+    /// Cumulative cache counters.
+    private var totalInput: Int = 0
+    private var totalCacheRead: Int = 0
+    private var totalCacheCreation: Int = 0
+
+    /// Cumulative cost.
+    private(set) var costEUR: Double = 0.0
+
+    /// Thinking / output token estimates for ratio.
+    private var estimatedThinkingTokens: Int = 0
+    private var estimatedOutputTokens: Int = 0
+    private var hasThinkingData: Bool = false
+
+    /// Previous event timestamp for idle-gap detection.
+    private var previousTimestamp: Date?
+
+    // MARK: - Init
+
+    init(sessionId: String, startTime: Date) {
+        self.sessionId = sessionId
+        self.startTime = startTime
+        self.lastEventTime = startTime
+    }
+
+    // MARK: - Ingest
+
+    func ingest(_ event: ClaudeEvent) {
+        guard let ts = event.timestamp else { return }
+        lastEventTime = ts
+
+        // Idle gap detection (all event types)
+        if let prev = previousTimestamp {
+            let delta = ts.timeIntervalSince(prev)
+            if delta > 1.0 {
+                idleGaps.append((date: ts, gap: delta))
+            }
+        }
+        previousTimestamp = ts
+
+        switch event {
+        case .assistant(let msg, let timestamp, _):
+            model = msg.model
+
+            // Output tokens for tok/min window
+            outputTokenEvents.append((date: timestamp, tokens: msg.usage.outputTokens))
+
+            // Thinking / output estimation
+            if let thinkText = msg.thinkingText, !thinkText.isEmpty {
+                // Rough estimate: 4 chars per token
+                estimatedThinkingTokens += max(thinkText.count / 4, 1)
+                hasThinkingData = true
+            }
+            if let outText = msg.outputText, !outText.isEmpty {
+                estimatedOutputTokens += max(outText.count / 4, 1)
+            }
+            // Also add usage-reported output tokens to estimate
+            estimatedOutputTokens += msg.usage.outputTokens
+
+            // Cache totals
+            totalInput += msg.usage.inputTokens
+            totalCacheRead += msg.usage.cacheReadInputTokens
+            totalCacheCreation += msg.usage.cacheCreationInputTokens
+
+            // Cost
+            if let c = Pricing.costEUR(
+                model: msg.model,
+                inputTokens: msg.usage.inputTokens,
+                outputTokens: msg.usage.outputTokens,
+                cacheReadTokens: msg.usage.cacheReadInputTokens,
+                cacheCreationTokens: msg.usage.cacheCreationInputTokens
+            ) {
+                costEUR += c
+            }
+
+        case .progress(_, let isToolUse, let isError, let timestamp, _):
+            if isToolUse {
+                toolEvents.append((date: timestamp, isError: isError))
+            }
+
+        case .queueOperation(let operation, _, _):
+            if operation == "enqueue" {
+                enqueueCount += 1
+            } else if operation == "complete" {
+                completeCount += 1
+            }
+
+        case .user, .system, .unknown:
+            break
+        }
+    }
+
+    // MARK: - Snapshot
+
+    func snapshot(at now: Date) -> MetricsSnapshot {
+        let shortWindow = Double(InkPulseDefaults.shortWindowSeconds)  // 60s
+        let longWindow = Double(InkPulseDefaults.longWindowSeconds)    // 300s
+
+        let shortCutoff = now.addingTimeInterval(-shortWindow)
+        let longCutoff = now.addingTimeInterval(-longWindow)
+
+        // 1. tokenMin: output tokens in 60s window / window minutes
+        let recentTokens = outputTokenEvents
+            .filter { $0.date > shortCutoff }
+            .reduce(0) { $0 + $1.tokens }
+        let windowMinutes = shortWindow / 60.0
+        let tokenMin = Double(recentTokens) / windowMinutes
+
+        // 2. toolFreq: tool events in 60s / window minutes
+        let recentTools = toolEvents.filter { $0.date > shortCutoff }
+        let toolFreq = Double(recentTools.count) / windowMinutes
+
+        // 3. idleAvgS: mean of idle gaps >1s in 60s window
+        let recentGaps = idleGaps.filter { $0.date > shortCutoff }
+        let idleAvgS: Double
+        if recentGaps.isEmpty {
+            idleAvgS = 0.0
+        } else {
+            idleAvgS = recentGaps.map(\.gap).reduce(0, +) / Double(recentGaps.count)
+        }
+
+        // 4. errorRate: errors / total tools in 5min window
+        let longTools = toolEvents.filter { $0.date > longCutoff }
+        let longErrors = longTools.filter { $0.isError }.count
+        let errorRate: Double
+        if longTools.isEmpty {
+            errorRate = 0.0
+        } else {
+            errorRate = Double(longErrors) / Double(longTools.count)
+        }
+
+        // 5. thinkOutputRatio
+        let thinkOutputRatio: Double?
+        if hasThinkingData && estimatedOutputTokens > 0 {
+            thinkOutputRatio = Double(estimatedThinkingTokens) / Double(estimatedOutputTokens)
+        } else {
+            thinkOutputRatio = nil
+        }
+
+        // 6. cacheHit
+        let cacheDenom = totalInput + totalCacheRead + totalCacheCreation
+        let cacheHit: Double
+        if cacheDenom == 0 {
+            cacheHit = 0.0
+        } else {
+            cacheHit = Double(totalCacheRead) / Double(cacheDenom)
+        }
+
+        // 7. subagentCount
+        let subagentCount = max(enqueueCount - completeCount, 0)
+
+        // 8. costEUR already tracked cumulatively
+
+        // Session duration
+        let sessionDurationMinutes = now.timeIntervalSince(startTime) / 60.0
+
+        // Health score
+        let healthResult = HealthScore.compute(
+            tokenMin: tokenMin,
+            toolFreq: toolFreq,
+            idleAvgS: idleAvgS,
+            errorRate: errorRate,
+            thinkOutputRatio: thinkOutputRatio,
+            cacheHit: cacheHit,
+            subagentCount: subagentCount,
+            costEUR: costEUR,
+            sessionDurationMinutes: sessionDurationMinutes
+        )
+
+        // Prune old events outside long window
+        outputTokenEvents.removeAll { $0.date <= longCutoff }
+        toolEvents.removeAll { $0.date <= longCutoff }
+        idleGaps.removeAll { $0.date <= longCutoff }
+
+        return MetricsSnapshot(
+            sessionId: sessionId,
+            model: model,
+            tokenMin: tokenMin,
+            toolFreq: toolFreq,
+            idleAvgS: idleAvgS,
+            errorRate: errorRate,
+            thinkOutputRatio: thinkOutputRatio,
+            cacheHit: cacheHit,
+            subagentCount: subagentCount,
+            costEUR: costEUR,
+            health: healthResult.score,
+            anomaly: healthResult.anomaly?.rawValue,
+            startTime: startTime,
+            lastEventTime: lastEventTime
+        )
+    }
+}

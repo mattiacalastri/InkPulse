@@ -1,0 +1,144 @@
+import XCTest
+@testable import InkPulse
+
+final class MetricsTests: XCTestCase {
+
+    // MARK: - Helpers
+
+    private let sid = "sess-metrics-001"
+    private let baseDate = ISO8601DateFormatter().date(from: "2026-03-23T10:00:00Z")!
+
+    private func makeAssistantEvent(
+        model: String = "claude-sonnet-4",
+        inputTokens: Int = 100,
+        outputTokens: Int = 100,
+        cacheRead: Int = 0,
+        cacheCreation: Int = 0,
+        thinkingText: String? = nil,
+        outputText: String? = nil,
+        at offset: TimeInterval = 0
+    ) -> ClaudeEvent {
+        let usage = TokenUsage(
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            cacheReadInputTokens: cacheRead,
+            cacheCreationInputTokens: cacheCreation
+        )
+        let msg = AssistantMessage(
+            model: model,
+            usage: usage,
+            thinkingText: thinkingText,
+            outputText: outputText,
+            requestId: nil
+        )
+        return .assistant(msg, timestamp: baseDate.addingTimeInterval(offset), sessionId: sid)
+    }
+
+    private func makeToolEvent(isError: Bool = false, at offset: TimeInterval = 0) -> ClaudeEvent {
+        .progress(
+            toolUseID: "tool-\(UUID().uuidString.prefix(4))",
+            isToolUse: true,
+            isError: isError,
+            timestamp: baseDate.addingTimeInterval(offset),
+            sessionId: sid
+        )
+    }
+
+    private func makeQueueEvent(operation: String, at offset: TimeInterval = 0) -> ClaudeEvent {
+        .queueOperation(
+            operation: operation,
+            timestamp: baseDate.addingTimeInterval(offset),
+            sessionId: sid
+        )
+    }
+
+    // MARK: - 1. testTokenMinCalculation
+
+    func testTokenMinCalculation() {
+        let session = SessionMetrics(sessionId: sid, startTime: baseDate)
+
+        // Inject 1000 output tokens spread across 60 seconds
+        session.ingest(makeAssistantEvent(outputTokens: 500, at: 10))
+        session.ingest(makeAssistantEvent(outputTokens: 500, at: 50))
+
+        let snap = session.snapshot(at: baseDate.addingTimeInterval(60))
+
+        // 1000 tokens in 60s window = 1000 tok/min
+        XCTAssertGreaterThan(snap.tokenMin, 500, "Expected >500 tok/min, got \(snap.tokenMin)")
+    }
+
+    // MARK: - 2. testCacheHitIncludesAllInputs
+
+    func testCacheHitIncludesAllInputs() {
+        let session = SessionMetrics(sessionId: sid, startTime: baseDate)
+
+        // 100 input + 10 cache_read + 10 cache_creation = 120 denominator
+        // cacheHit = 10 / 120
+        session.ingest(makeAssistantEvent(
+            inputTokens: 100,
+            outputTokens: 50,
+            cacheRead: 10,
+            cacheCreation: 10,
+            at: 5
+        ))
+
+        let snap = session.snapshot(at: baseDate.addingTimeInterval(10))
+        let expected = 10.0 / 120.0
+
+        XCTAssertEqual(snap.cacheHit, expected, accuracy: 0.001,
+                       "Expected cacheHit ~\(expected), got \(snap.cacheHit)")
+    }
+
+    // MARK: - 3. testErrorRateCalculation
+
+    func testErrorRateCalculation() {
+        let session = SessionMetrics(sessionId: sid, startTime: baseDate)
+
+        // 3 tool events, 1 is an error → errorRate = 1/3
+        session.ingest(makeToolEvent(isError: false, at: 5))
+        session.ingest(makeToolEvent(isError: true, at: 10))
+        session.ingest(makeToolEvent(isError: false, at: 15))
+
+        let snap = session.snapshot(at: baseDate.addingTimeInterval(20))
+
+        XCTAssertEqual(snap.errorRate, 1.0 / 3.0, accuracy: 0.01,
+                       "Expected errorRate ~0.333, got \(snap.errorRate)")
+    }
+
+    // MARK: - 4. testSubagentTracking
+
+    func testSubagentTracking() {
+        let session = SessionMetrics(sessionId: sid, startTime: baseDate)
+
+        session.ingest(makeQueueEvent(operation: "enqueue", at: 5))
+        session.ingest(makeQueueEvent(operation: "enqueue", at: 10))
+        session.ingest(makeQueueEvent(operation: "complete", at: 15))
+
+        let snap = session.snapshot(at: baseDate.addingTimeInterval(20))
+
+        XCTAssertEqual(snap.subagentCount, 1,
+                       "Expected 1 active subagent (2 enqueued - 1 completed), got \(snap.subagentCount)")
+    }
+
+    // MARK: - 5. testCostCalculation
+
+    func testCostCalculation() {
+        let session = SessionMetrics(sessionId: sid, startTime: baseDate)
+
+        // 1M input + 100K output on opus
+        // Input: 1_000_000 / 1_000_000 * 15.0 = $15.0
+        // Output: 100_000 / 1_000_000 * 75.0 = $7.5
+        // Total USD: $22.5 → EUR: 22.5 * 0.92 = 20.7
+        session.ingest(makeAssistantEvent(
+            model: "claude-opus-4",
+            inputTokens: 1_000_000,
+            outputTokens: 100_000,
+            at: 5
+        ))
+
+        let snap = session.snapshot(at: baseDate.addingTimeInterval(10))
+
+        XCTAssertEqual(snap.costEUR, 20.7, accuracy: 0.1,
+                       "Expected ~EUR 20.7, got \(snap.costEUR)")
+    }
+}
