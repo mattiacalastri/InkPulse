@@ -67,30 +67,36 @@ final class SessionWatcher {
     func scanForActiveJSONL() {
         let fm = FileManager.default
 
-        guard let projectDirs = try? fm.contentsOfDirectory(
-            at: projectsDir,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return }
+        // Use Process to find recently modified JSONL files efficiently
+        // This avoids iterating 1000+ files with attributesOfItem
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/find")
+        proc.arguments = [projectsDir.path, "-name", "*.jsonl", "-mmin", "-10", "-maxdepth", "2"]
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = FileHandle.nullDevice
 
-        for dir in projectDirs {
-            var isDir: ObjCBool = false
-            guard fm.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else {
-                continue
-            }
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+        } catch {
+            AppState.log("find failed: \(error)")
+            return
+        }
 
-            guard let files = try? fm.contentsOfDirectory(
-                at: dir,
-                includingPropertiesForKeys: nil,
-                options: [.skipsHiddenFiles]
-            ) else { continue }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let output = String(data: data, encoding: .utf8) else { return }
 
-            for file in files where file.pathExtension == "jsonl" {
-                let key = file.path
-                if tailers[key] == nil {
-                    tailers[key] = FileTailer(fileURL: file)
-                }
-            }
+        let paths = output.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        AppState.log("scanForActiveJSONL: \(paths.count) recent jsonl files")
+
+        for path in paths {
+            if tailers[path] != nil { continue }
+            let url = URL(fileURLWithPath: path)
+            let fileSize = (try? fm.attributesOfItem(atPath: path)[.size] as? UInt64) ?? 0
+            let tailOffset = fileSize > 500_000 ? fileSize - 500_000 : 0
+            tailers[path] = FileTailer(fileURL: url, offset: tailOffset)
+            AppState.log("Tracking: \(url.lastPathComponent) (size=\(fileSize), offset=\(tailOffset))")
         }
     }
 
@@ -99,8 +105,11 @@ final class SessionWatcher {
     func readAll() {
         var allEvents: [ClaudeEvent] = []
 
-        for (_, tailer) in tailers {
+        for (path, tailer) in tailers {
             let lines = tailer.readNewLines()
+            if !lines.isEmpty {
+                AppState.log("readAll: \(URL(fileURLWithPath: path).lastPathComponent) → \(lines.count) new lines")
+            }
             for line in lines {
                 let event = JSONLParser.parse(line: line)
                 if case .unknown = event { continue }
@@ -109,6 +118,7 @@ final class SessionWatcher {
         }
 
         if !allEvents.isEmpty {
+            AppState.log("readAll: \(allEvents.count) events ingested")
             onNewEvents(allEvents)
         }
     }

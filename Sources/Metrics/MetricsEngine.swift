@@ -27,7 +27,9 @@ final class MetricsEngine: ObservableObject {
     @Published var sessions: [String: MetricsSnapshot] = [:]
 
     /// Internal per-session state trackers.
-    private var sessionTrackers: [String: SessionMetrics] = [:]
+    private(set) var sessionTrackers: [String: SessionMetrics] = [:]
+
+    var trackerCount: Int { sessionTrackers.count }
 
     private let timeoutSeconds: Double
 

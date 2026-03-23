@@ -13,7 +13,7 @@ enum JSONLParser {
 
         guard let type = root["type"] as? String,
               let timestamp = parseTimestamp(root["timestamp"]),
-              let sessionId = root["session_id"] as? String else {
+              let sessionId = root["sessionId"] as? String else {
             return .unknown
         }
 
@@ -111,7 +111,7 @@ enum JSONLParser {
     // MARK: - Progress
 
     private static func parseProgress(_ root: [String: Any], timestamp: Date, sessionId: String) -> ClaudeEvent {
-        let toolUseID = root["tool_use_id"] as? String
+        let toolUseID = (root["toolUseID"] ?? root["tool_use_id"]) as? String
         let dataStr = root["data"] as? String ?? ""
 
         let isHookProgress = dataStr.contains("hook_progress")

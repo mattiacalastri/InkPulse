@@ -19,7 +19,7 @@ final class ParserTests: XCTestCase {
         let line = json([
             "type": "assistant",
             "timestamp": ts,
-            "session_id": sid,
+            "sessionId": sid,
             "message": [
                 "model": "claude-sonnet-4-6",
                 "usage": [
@@ -59,8 +59,8 @@ final class ParserTests: XCTestCase {
         let line = json([
             "type": "progress",
             "timestamp": ts,
-            "session_id": sid,
-            "tool_use_id": "tool-xyz",
+            "sessionId": sid,
+            "toolUseID": "tool-xyz",
             "data": "hook_progress: checking lint"
         ])
 
@@ -82,8 +82,8 @@ final class ParserTests: XCTestCase {
         let line = json([
             "type": "progress",
             "timestamp": ts,
-            "session_id": sid,
-            "tool_use_id": "tool-err",
+            "sessionId": sid,
+            "toolUseID": "tool-err",
             "data": "Permission denied for /etc/shadow"
         ])
 
@@ -103,7 +103,7 @@ final class ParserTests: XCTestCase {
         let line = json([
             "type": "queue-operation",
             "timestamp": ts,
-            "session_id": sid,
+            "sessionId": sid,
             "operation": "enqueue"
         ])
 
@@ -124,7 +124,7 @@ final class ParserTests: XCTestCase {
         let line = json([
             "type": "user",
             "timestamp": ts,
-            "session_id": sid
+            "sessionId": sid
         ])
 
         let event = JSONLParser.parse(line: line)
@@ -155,7 +155,7 @@ final class ParserTests: XCTestCase {
         let line = json([
             "type": "file-history-snapshot",
             "timestamp": ts,
-            "session_id": sid
+            "sessionId": sid
         ])
 
         let event = JSONLParser.parse(line: line)
@@ -172,7 +172,7 @@ final class ParserTests: XCTestCase {
         let line = json([
             "type": "assistant",
             "timestamp": ts,
-            "session_id": sid,
+            "sessionId": sid,
             "message": [
                 "model": "claude-haiku-4-5",
                 "usage": [

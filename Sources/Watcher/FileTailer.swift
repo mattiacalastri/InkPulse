@@ -5,10 +5,12 @@ final class FileTailer {
 
     let fileURL: URL
     private(set) var offset: UInt64
+    private var isFirstRead: Bool
 
     init(fileURL: URL, offset: UInt64 = 0) {
         self.fileURL = fileURL
         self.offset = offset
+        self.isFirstRead = offset > 0 // if starting mid-file, first line is partial
     }
 
     /// Read all new lines appended since the last read.
@@ -39,7 +41,14 @@ final class FileTailer {
         guard let text = String(data: data, encoding: .utf8) else { return [] }
 
         // Split by newlines, filtering out empty trailing elements
-        let lines = text.components(separatedBy: "\n").filter { !$0.isEmpty }
+        var lines = text.components(separatedBy: "\n").filter { !$0.isEmpty }
+
+        // When starting mid-file, first line is always truncated — skip it
+        if isFirstRead && !lines.isEmpty {
+            lines.removeFirst()
+            isFirstRead = false
+        }
+
         return lines
     }
 }
