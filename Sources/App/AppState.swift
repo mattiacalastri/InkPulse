@@ -14,6 +14,8 @@ final class AppState: ObservableObject {
     private var sessionWatcher: SessionWatcher?
     private var refreshTimer: Timer?
     private var heartbeatTimer: Timer?
+    private(set) var notificationManager = NotificationManager()
+    private(set) var anomalyWatcher: AnomalyWatcher?
 
     private let maxTokenHistory = 300  // ~5 min at 1 sample/s
 
@@ -54,6 +56,10 @@ final class AppState: ObservableObject {
 
         // Purge old files on launch
         heartbeatLogger?.purgeOldFiles()
+
+        // Notifications
+        notificationManager.requestAuthorization()
+        anomalyWatcher = AnomalyWatcher(notificationManager: notificationManager)
     }
 
     // MARK: - Refresh
@@ -72,6 +78,9 @@ final class AppState: ObservableObject {
                 tokenHistory.removeFirst(tokenHistory.count - maxTokenHistory)
             }
         }
+
+        // Anomaly check
+        anomalyWatcher?.check(sessions: metricsEngine.sessions, sessionCwds: sessionCwds)
     }
 
     // MARK: - Heartbeat
