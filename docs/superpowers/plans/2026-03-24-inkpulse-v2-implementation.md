@@ -87,7 +87,7 @@ Window("InkPulse", id: "dashboard") {
     TabbedDashboard(appState: appState)
 }
 .windowStyle(.hiddenTitleBar)
-.defaultSize(width: 660, height: 600)
+.defaultSize(width: 680, height: 640)  // Wider than v1 (620x560) to accommodate tab content + charts
 ```
 
 - [ ] **Step 4: Build and verify**
@@ -552,30 +552,33 @@ struct MonthTrendView: View {
                     .frame(height: 100)
             }
 
-            // Cumulative cost
+            // Cumulative cost (precomputed — var inside Chart{} result builder is illegal)
             VStack(alignment: .leading, spacing: 8) {
                 sectionLabel("CUMULATIVE COST")
-                Chart {
+                let cumulativeCost: [(idx: Int, running: Double)] = {
                     var running = 0.0
-                    ForEach(Array(summaries.enumerated()), id: \.offset) { idx, day in
-                        let _ = (running += day.totalCost)
-                        AreaMark(
-                            x: .value("Day", idx),
-                            y: .value("Cost", running)
-                        )
-                        .foregroundStyle(
-                            .linearGradient(
-                                colors: [Color(hex: "#00d4aa").opacity(0.3), Color(hex: "#00d4aa").opacity(0.05)],
-                                startPoint: .top, endPoint: .bottom
-                            )
-                        )
-
-                        LineMark(
-                            x: .value("Day", idx),
-                            y: .value("Cost", running)
-                        )
-                        .foregroundStyle(Color(hex: "#00d4aa"))
+                    return summaries.enumerated().map { idx, day in
+                        running += day.totalCost
+                        return (idx: idx, running: running)
                     }
+                }()
+                Chart(cumulativeCost, id: \.idx) { item in
+                    AreaMark(
+                        x: .value("Day", item.idx),
+                        y: .value("Cost", item.running)
+                    )
+                    .foregroundStyle(
+                        .linearGradient(
+                            colors: [Color(hex: "#00d4aa").opacity(0.3), Color(hex: "#00d4aa").opacity(0.05)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+
+                    LineMark(
+                        x: .value("Day", item.idx),
+                        y: .value("Cost", item.running)
+                    )
+                    .foregroundStyle(Color(hex: "#00d4aa"))
                 }
                 .chartXAxis(.hidden)
                 .frame(height: 120)
@@ -612,18 +615,57 @@ struct HeatmapGrid: View {
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: 7)
 
+    /// Build a calendar-aligned grid: Mon=0, Sun=6. Pad start with empty cells
+    /// so the first day lands on its correct weekday column.
+    private var calendarCells: [(date: Date?, summary: DaySummary?)] {
+        guard let firstDay = summaries.first?.date else { return [] }
+        let calendar = Calendar.current
+        // weekday: 1=Sun. Convert to Mon=0 index.
+        let wd = calendar.component(.weekday, from: firstDay)
+        let startPad = wd == 1 ? 6 : wd - 2 // Mon=0, Tue=1, ..., Sun=6
+
+        var cells: [(date: Date?, summary: DaySummary?)] = []
+        // Leading empty cells
+        for _ in 0..<startPad {
+            cells.append((date: nil, summary: nil))
+        }
+        // Data cells — missing days (empty records) render as dark grey
+        for day in summaries {
+            cells.append((date: day.date, summary: day))
+        }
+        return cells
+    }
+
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 3) {
-            ForEach(Array(summaries.enumerated()), id: \.offset) { _, day in
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(day.records.isEmpty ? Color.white.opacity(0.04) : healthColor(for: day.avgHealth).opacity(0.7))
-                    .aspectRatio(1, contentMode: .fit)
-                    .overlay(
-                        day.records.isEmpty ? nil :
-                        Text("\(day.avgHealth)")
-                            .font(.system(size: 8, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.6))
-                    )
+        VStack(alignment: .leading, spacing: 2) {
+            // Weekday labels
+            HStack(spacing: 3) {
+                ForEach(["M", "T", "W", "T", "F", "S", "S"], id: \.self) { label in
+                    Text(label)
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.2))
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            LazyVGrid(columns: columns, spacing: 3) {
+                ForEach(Array(calendarCells.enumerated()), id: \.offset) { _, cell in
+                    if let summary = cell.summary {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(summary.records.isEmpty ? Color.white.opacity(0.04) : healthColor(for: summary.avgHealth).opacity(0.7))
+                            .aspectRatio(1, contentMode: .fit)
+                            .overlay(
+                                summary.records.isEmpty ? nil :
+                                Text("\(summary.avgHealth)")
+                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(.white.opacity(0.6))
+                            )
+                    } else {
+                        // Empty padding cell
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Color.clear)
+                            .aspectRatio(1, contentMode: .fit)
+                    }
+                }
             }
         }
     }
@@ -754,7 +796,14 @@ struct ReportsTab: View {
         guard !records.isEmpty else { return 0 }
         return records.map(\.health).reduce(0, +) / records.count
     }
-    private var totalCost: Double { records.map(\.costEur).max() ?? 0 }
+    // Cost: for multi-session aggregation, sum the per-session max
+    // (costEur is cumulative per session — max per session is the session total)
+    private var totalCost: Double {
+        let grouped = Dictionary(grouping: records, by: \.sessionId)
+        return grouped.values.map { sessionRecords in
+            sessionRecords.map(\.costEur).max() ?? 0
+        }.reduce(0, +)
+    }
     private var model: String { records.last?.model ?? "—" }
     private var avgCacheHit: Double {
         guard !records.isEmpty else { return 0 }
@@ -1059,11 +1108,15 @@ final class NotificationManager {
 
     func requestAuthorization() {
         center.requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
-            self?.isAuthorized = granted
-            if let error = error {
-                AppState.log("Notification auth error: \(error.localizedDescription)")
+            // Dispatch to main thread — completion fires on arbitrary queue,
+            // isAuthorized is read from main thread in send()
+            DispatchQueue.main.async {
+                self?.isAuthorized = granted
+                if let error = error {
+                    AppState.log("Notification auth error: \(error.localizedDescription)")
+                }
+                AppState.log("Notification authorization: \(granted)")
             }
-            AppState.log("Notification authorization: \(granted)")
         }
     }
 
@@ -1344,7 +1397,11 @@ cp ~/projects/InkPulse/Resources/inkpulse_alert.aiff /Applications/InkPulse.app/
 
 - [ ] **Step 4: Update Info.plist with notification description**
 
-Add `NSUserNotificationsUsageDescription` key to `/Applications/InkPulse.app/Contents/Info.plist`.
+```bash
+plutil -insert NSUserNotificationsUsageDescription \
+  -string "InkPulse sends notifications when Claude Code sessions encounter critical anomalies." \
+  /Applications/InkPulse.app/Contents/Info.plist
+```
 
 - [ ] **Step 5: Launch and verify**
 
