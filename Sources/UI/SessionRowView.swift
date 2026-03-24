@@ -41,89 +41,118 @@ func contextColor(for percent: Double) -> Color {
 
 // MARK: - Agent Mood
 
-/// Derives an emoji mood from the snapshot metrics. Pure function, no new state.
-func agentMood(for snap: MetricsSnapshot) -> (emoji: String, status: String) {
+/// Derives a mood indicator from the snapshot metrics.
+/// Returns a unicode glyph, status label, and semantic color.
+func agentMood(for snap: MetricsSnapshot) -> (emoji: String, status: String, color: Color) {
     let idle = Date().timeIntervalSince(snap.lastEventTime)
+
+    let red = Color(hex: "#FF4444")
+    let orange = Color(hex: "#FFA500")
+    let teal = Color(hex: "#00d4aa")
+    let blue = Color(hex: "#4A9EFF")
+    let dim = Color.white.opacity(0.3)
 
     // Sleeping — no events for >2 min
     if idle > 120 {
-        return ("😴", "sleeping")
+        return ("○", "sleeping", dim)
     }
 
     // Stalled — idle >30s
     if idle > 30 || snap.idleAvgS > 30 {
-        return ("🧊", "stalled")
+        return ("■", "stalled", orange)
     }
 
     // Anomaly states
     if let anomaly = snap.anomaly {
         switch anomaly {
-        case "loop": return ("🔄", "looping")
-        case "stall": return ("🧊", "stalled")
-        case "hemorrhage": return ("💸", "burning tokens")
-        case "explosion": return ("🐙", "spawning \(snap.subagentCount) agents")
-        case "deep_thinking": return ("🧠", "thinking deeply")
+        case "loop": return ("⟳", "looping", red)
+        case "stall": return ("■", "stalled", orange)
+        case "hemorrhage": return ("▼", "hemorrhage", red)
+        case "explosion": return ("◆", "spawning \(snap.subagentCount) agents", orange)
+        case "deep_thinking": return ("◇", "deep thinking", blue)
         default: break
         }
     }
 
     // Spawning many agents
     if snap.subagentCount > 3 {
-        return ("🐙", "orchestrating \(snap.subagentCount) agents")
+        return ("◆", "orchestrating \(snap.subagentCount) agents", teal)
     }
 
     // High speed
     if snap.tokenMin > 800 && snap.errorRate < 0.05 {
-        return ("⚡", "forging fast")
+        return ("●", "forging", teal)
     }
 
     // High cache efficiency
     if snap.cacheHit > 0.95 {
-        return ("🦊", "efficient")
+        return ("●", "efficient", teal)
     }
 
     // Struggling
     if snap.errorRate > 0.10 {
-        return ("😤", "struggling")
+        return ("▲", "struggling", orange)
     }
 
     // Normal active
     if snap.tokenMin > 200 {
-        return ("🔥", "working")
+        return ("●", "active", teal)
     }
 
     // Low activity
-    return ("💭", "idle")
+    return ("○", "idle", dim)
 }
 
-// MARK: - Project Name
+// MARK: - Pillar Identity
 
-/// Derives a readable name from the cwd (working directory) or file path.
-/// Priority: cwd last component → file path project dir → sessionId prefix
-func projectName(from sessionId: String, filePath: String?, cwd: String?) -> String {
-    // Best: use cwd last path component
-    if let cwd = cwd {
+/// Maps a working directory to a strategic pillar with name, color, and emoji.
+struct PillarInfo {
+    let name: String
+    let color: Color
+    let emoji: String
+    let shortName: String
+
+    static let bot = PillarInfo(name: "BTC Bot", color: Color(hex: "#FFA500"), emoji: "", shortName: "Bot")
+    static let aurahome = PillarInfo(name: "AuraHome", color: Color(hex: "#00d4aa"), emoji: "", shortName: "AH")
+    static let astra = PillarInfo(name: "Astra", color: Color(hex: "#9B59B6"), emoji: "", shortName: "AD")
+    static let brand = PillarInfo(name: "Brand OS", color: Color(hex: "#C0C0C0"), emoji: "", shortName: "OS")
+    static let home = PillarInfo(name: "Home", color: Color(hex: "#4A9EFF"), emoji: "", shortName: "~")
+
+    static func from(cwd: String?) -> PillarInfo {
+        guard let cwd = cwd else { return .home }
+        let lower = cwd.lowercased()
+        if lower.contains("btc_predictions") { return .bot }
+        if lower.contains("aurahome") { return .aurahome }
+        if lower.contains("astra digital") { return .astra }
+        if lower.contains("claude_voice") { return .brand }
+        if lower.contains("inkpulse") { return PillarInfo(name: "InkPulse", color: Color(hex: "#00d4aa"), emoji: "", shortName: "IP") }
+        if lower.contains("tentacolo") { return PillarInfo(name: "Tentacolo", color: Color(hex: "#FFD700"), emoji: "", shortName: "3D") }
+        if lower.contains("guccione") { return PillarInfo(name: "Guccione", color: Color(hex: "#9B59B6"), emoji: "", shortName: "GC") }
+        if lower.contains("luxguard") { return PillarInfo(name: "LuxGuard", color: Color(hex: "#DAA520"), emoji: "", shortName: "LG") }
+        if lower.contains("polpo-cockpit") || lower.contains("polpo-control") { return .brand }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        if cwd == home || URL(fileURLWithPath: cwd).lastPathComponent == NSUserName() { return .home }
         let last = URL(fileURLWithPath: cwd).lastPathComponent
-        // Map home dir to "Home"
-        if last == NSUserName() || cwd == FileManager.default.homeDirectoryForCurrentUser.path {
-            return "Home"
-        }
-        return last
+        return PillarInfo(name: last, color: Color(hex: "#4A9EFF"), emoji: "", shortName: String(last.prefix(2).uppercased()))
     }
 
-    // Fallback: derive from file path
-    guard let path = filePath else {
-        return String(sessionId.prefix(8))
+    /// Pillar name for persistence (HeartbeatRecord).
+    static func pillarName(from cwd: String?) -> String {
+        return from(cwd: cwd).name
     }
+}
+
+// MARK: - Project Name (uses PillarInfo)
+
+func projectName(from sessionId: String, filePath: String?, cwd: String?) -> String {
+    if cwd != nil { return PillarInfo.from(cwd: cwd).name }
+    guard let path = filePath else { return String(sessionId.prefix(8)) }
     let components = path.components(separatedBy: "/")
     if let idx = components.firstIndex(of: "projects"), idx + 1 < components.count {
         let projectDir = components[idx + 1]
         let parts = projectDir.components(separatedBy: "-")
-        if parts.count > 3 {
-            return Array(parts.dropFirst(3)).joined(separator: "-")
-        } else {
-            return "Home"
-        }
+        if parts.count > 3 { return Array(parts.dropFirst(3)).joined(separator: "-") }
+        return "Home"
     }
     return String(sessionId.prefix(8))
 }
@@ -169,25 +198,28 @@ struct SessionRowView: View {
 
     var body: some View {
         let mood = agentMood(for: snapshot)
-        let name = projectName(from: snapshot.sessionId, filePath: filePath, cwd: cwd)
+        let pillar = PillarInfo.from(cwd: cwd)
 
         VStack(alignment: .leading, spacing: 0) {
             // ── Main row ──
             HStack(spacing: 8) {
-                // EGI glyph when window active, mood emoji otherwise
+                // Mood indicator: EGI glyph or colored status dot
                 if snapshot.egiState > .dormant {
                     EGIGlyphView(state: snapshot.egiState, size: 16)
                 } else {
                     Text(mood.emoji)
-                        .font(.title3)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(mood.color)
+                        .frame(width: 20)
                 }
 
-                // Name + model badge + status
+                // Pillar name + model badge + status
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(name)
+                        Text(pillar.name)
                             .font(.system(.caption, design: .rounded))
                             .fontWeight(.semibold)
+                            .foregroundStyle(pillar.color)
                             .lineLimit(1)
 
                         // Model badge
@@ -389,7 +421,7 @@ struct SessionRowView: View {
                         }
                     } message: {
                         let pidStr = resolvedPID.map { "\($0)" } ?? "?"
-                        Text("Terminate session \(projectName(from: snapshot.sessionId, filePath: filePath, cwd: cwd))? (PID \(pidStr))")
+                        Text("Terminate session \(pillar.name)? (PID \(pidStr))")
                     }
                 }
                 .padding(.horizontal, 4)

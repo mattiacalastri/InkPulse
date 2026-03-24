@@ -104,7 +104,7 @@ final class AppState: ObservableObject {
         guard !isPaused else { return }
         let snaps = Array(metricsEngine.sessions.values)
         AppState.log("heartbeat: \(snaps.count) snapshots, trackers=\(metricsEngine.trackerCount)")
-        heartbeatLogger?.logSnapshots(snaps)
+        heartbeatLogger?.logSnapshots(snaps, cwds: sessionCwds)
 
         // Save offsets + update file paths + cwds for UI
         if let offsets = sessionWatcher?.currentOffsets {

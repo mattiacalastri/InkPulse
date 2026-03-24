@@ -120,7 +120,9 @@ struct LiveTab: View {
                     .fill(Color(hex: "#00d4aa").opacity(0.15))
                     .frame(width: 48, height: 48)
                     .overlay(
-                        Text("🐙").font(.title)
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.title2)
+                            .foregroundStyle(Color(hex: "#00d4aa"))
                     )
             }
 
