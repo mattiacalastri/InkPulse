@@ -533,41 +533,5 @@ private struct ReportsContentView: View {
     }
 }
 
-// MARK: - Section label helper (local to this file)
-
-private func sectionLabel(_ text: String) -> some View {
-    HStack(spacing: 6) {
-        Rectangle()
-            .fill(Color(hex: "#00d4aa"))
-            .frame(width: 3, height: 12)
-            .cornerRadius(1.5)
-        Text(text)
-            .font(.system(size: 11, weight: .semibold, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.5))
-    }
-}
-
-// MARK: - Empty chart helper (local to this file)
-
-private func emptyChart(_ message: String) -> some View {
-    RoundedRectangle(cornerRadius: 10)
-        .fill(Color.white.opacity(0.02))
-        .frame(height: 80)
-        .overlay(
-            Text(message)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.2))
-        )
-}
-
-// MARK: - Timestamp helper (local to this file)
-
-private func formatTimestamp(_ ts: String) -> String {
-    if let tIdx = ts.firstIndex(of: "T") {
-        let timeStr = ts[ts.index(after: tIdx)...]
-        if let dotIdx = timeStr.firstIndex(of: ".") { return String(timeStr[..<dotIdx]) }
-        if let zIdx   = timeStr.firstIndex(of: "Z") { return String(timeStr[..<zIdx]) }
-        return String(timeStr.prefix(8))
-    }
-    return ts
-}
+// Shared helpers (sectionLabel, emptyChart, formatTimestamp)
+// are in SharedComponents.swift
