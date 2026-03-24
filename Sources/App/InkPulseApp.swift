@@ -9,6 +9,12 @@ struct InkPulseApp: App {
     }()
 
     var body: some Scene {
+        Window("InkPulse", id: "dashboard") {
+            TabbedDashboard(appState: appState)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 680, height: 640)
+
         MenuBarExtra {
             PopoverView(appState: appState)
         } label: {
