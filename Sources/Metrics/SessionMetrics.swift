@@ -19,6 +19,12 @@ final class SessionMetrics {
     /// Gaps > 1 s between consecutive events (timestamped by the later event).
     private var idleGaps: [(date: Date, gap: Double)] = []
 
+    /// Timestamped tool names for diversity/domain tracking (EGI).
+    private var toolNameEvents: [(date: Date, name: String)] = []
+
+    /// EGI state tracker.
+    private(set) var egiTracker = EGITracker()
+
     /// Queue operations for subagent tracking.
     private var enqueueCount: Int = 0
     private var completeCount: Int = 0
@@ -38,6 +44,20 @@ final class SessionMetrics {
 
     /// Previous event timestamp for idle-gap detection.
     private var previousTimestamp: Date?
+
+    // MARK: - Context Window (Feature 1)
+
+    /// Total context tokens from the last assistant event usage.
+    private(set) var lastContextTokens: Int = 0
+
+    // MARK: - Last Tool + Task Name (Feature 2)
+
+    /// Name of the last tool invoked (e.g. "Edit", "Bash", "Read").
+    private(set) var lastToolName: String?
+    /// First argument of the last tool (e.g. file_path, command). Truncated to 30 chars.
+    private(set) var lastToolTarget: String?
+    /// Active task name from TaskCreate/TaskUpdate progress events.
+    private(set) var activeTaskName: String?
 
     // MARK: - Init
 
@@ -69,6 +89,17 @@ final class SessionMetrics {
             // Output tokens for tok/min window
             outputTokenEvents.append((date: timestamp, tokens: msg.usage.outputTokens))
 
+            // Context window tokens (Feature 1)
+            lastContextTokens = msg.usage.inputTokens
+                + msg.usage.cacheReadInputTokens
+                + msg.usage.cacheCreationInputTokens
+
+            // Last tool name + target from tool_use content blocks (Feature 2)
+            if let lastTool = msg.toolUses.last {
+                lastToolName = lastTool.name
+                lastToolTarget = lastTool.target
+            }
+
             // Thinking / output estimation
             if let thinkText = msg.thinkingText, !thinkText.isEmpty {
                 // Rough estimate: 4 chars per token
@@ -97,9 +128,14 @@ final class SessionMetrics {
                 costEUR += c
             }
 
-        case .progress(_, let isToolUse, let isError, let timestamp, _):
+        case .progress(let toolUseID, let toolName, let isToolUse, let isError, let timestamp, _):
+            _ = toolUseID  // suppress unused warning
             if isToolUse {
                 toolEvents.append((date: timestamp, isError: isError))
+                if let name = toolName {
+                    toolNameEvents.append((date: timestamp, name: name))
+                    lastToolName = name
+                }
             }
 
         case .queueOperation(let operation, _, _):
@@ -191,10 +227,42 @@ final class SessionMetrics {
             sessionDurationMinutes: sessionDurationMinutes
         )
 
+        // 9. Tool diversity & domain spread (EGI signals)
+        let recentToolNames = toolNameEvents.filter { $0.date > shortCutoff }
+        let toolDiversity = Set(recentToolNames.map(\.name)).count
+
+        let egiDomainCutoff = now.addingTimeInterval(-120) // 2min window for domains
+        let domainToolNames = toolNameEvents.filter { $0.date > egiDomainCutoff }
+        let domainSpread = Set(domainToolNames.map { EGIDomain.classify($0.name) }).count
+
+        // 10. EGI state machine evaluation
+        let egiResult = egiTracker.evaluate(
+            tokenMin: tokenMin,
+            errorRate: errorRate,
+            cacheHit: cacheHit,
+            toolDiversity: toolDiversity,
+            domainSpread: domainSpread,
+            idleAvgS: idleAvgS,
+            thinkOutputRatio: thinkOutputRatio,
+            subagentCount: subagentCount,
+            at: now
+        )
+
         // Prune old events outside long window
         outputTokenEvents.removeAll { $0.date <= longCutoff }
         toolEvents.removeAll { $0.date <= longCutoff }
         idleGaps.removeAll { $0.date <= longCutoff }
+        toolNameEvents.removeAll { $0.date <= longCutoff }
+
+        // Context window % (Feature 1)
+        let config = ConfigLoader.load()
+        let contextLimit = ConfigLoader.contextLimit(for: model, config: config)
+        let contextPercent: Double
+        if contextLimit > 0 && lastContextTokens > 0 {
+            contextPercent = Double(lastContextTokens) / Double(contextLimit)
+        } else {
+            contextPercent = 0.0
+        }
 
         return MetricsSnapshot(
             sessionId: sessionId,
@@ -210,7 +278,16 @@ final class SessionMetrics {
             health: healthResult.score,
             anomaly: healthResult.anomaly?.rawValue,
             startTime: startTime,
-            lastEventTime: lastEventTime
+            lastEventTime: lastEventTime,
+            egiState: egiResult.state,
+            egiConfidence: egiResult.confidence,
+            toolDiversity: toolDiversity,
+            domainSpread: domainSpread,
+            lastContextTokens: lastContextTokens,
+            contextPercent: contextPercent,
+            lastToolName: lastToolName,
+            lastToolTarget: lastToolTarget,
+            activeTaskName: activeTaskName
         )
     }
 }

@@ -18,6 +18,19 @@ struct MetricsSnapshot {
     let anomaly: String?
     let startTime: Date
     let lastEventTime: Date
+    let egiState: EGIState
+    let egiConfidence: Double
+    let toolDiversity: Int
+    let domainSpread: Int
+
+    // Feature 1: Context Window %
+    let lastContextTokens: Int
+    let contextPercent: Double  // 0.0 - 1.0+
+
+    // Feature 2: Last Tool + Task Name
+    let lastToolName: String?
+    let lastToolTarget: String?
+    let activeTaskName: String?
 }
 
 // MARK: - MetricsEngine
@@ -89,5 +102,15 @@ final class MetricsEngine: ObservableObject {
                 return Anomaly(rawValue: raw)
             }
             .max { $0.severity < $1.severity }
+    }
+
+    /// Highest EGI state across all active sessions.
+    var globalEGIState: EGIState {
+        sessions.values.map(\.egiState).max() ?? .dormant
+    }
+
+    /// Number of sessions with EGI state above dormant.
+    var egiWindowCount: Int {
+        sessions.values.filter { $0.egiState > .dormant }.count
     }
 }

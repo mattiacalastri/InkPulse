@@ -82,6 +82,13 @@ struct PopoverView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+
+                // EGI glyph (global)
+                if appState.metricsEngine.globalEGIState > .dormant {
+                    EGIGlyphView(state: appState.metricsEngine.globalEGIState, size: 20)
+                        .padding(.trailing, 4)
+                }
+
                 if health >= 0 {
                     VStack(alignment: .trailing, spacing: 0) {
                         Text("\(health)")

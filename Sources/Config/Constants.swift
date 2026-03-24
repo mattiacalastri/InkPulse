@@ -40,6 +40,22 @@ enum InkPulseDefaults {
         static let idlePercent: (green: Double, yellow: Double) = (0.20, 0.50)
     }
 
+    // MARK: - Context Limits
+
+    static let defaultContextLimits: [String: Int] = [
+        "claude-opus-4": 200_000,
+        "claude-opus-4-6[1m]": 1_000_000,
+        "claude-sonnet-4": 200_000,
+        "claude-haiku-3.5": 200_000,
+    ]
+
+    static let fallbackContextLimit: Int = 200_000
+
+    // MARK: - Budget
+
+    static let defaultDailyBudgetEUR: Double = 0  // 0 = disabled
+    static let defaultBudgetAlertThresholds: [Double] = [0.8, 1.0]
+
     // MARK: - Default Metric Weights
 
     static let defaultWeights: [String: Double] = [

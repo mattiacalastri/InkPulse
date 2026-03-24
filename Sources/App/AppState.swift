@@ -19,6 +19,10 @@ final class AppState: ObservableObject {
 
     private let maxTokenHistory = 300  // ~5 min at 1 sample/s
 
+    /// Budget alert thresholds already triggered today (Feature 3).
+    private var triggeredBudgetThresholds: Set<Double> = []
+    private var budgetAlertDay: Int = -1  // day of year for reset
+
     // MARK: - Start
 
     func start() {
@@ -81,6 +85,9 @@ final class AppState: ObservableObject {
 
         // Anomaly check
         anomalyWatcher?.check(sessions: metricsEngine.sessions, sessionCwds: sessionCwds)
+
+        // Budget check (Feature 3)
+        checkBudget()
     }
 
     // MARK: - Heartbeat
@@ -103,6 +110,34 @@ final class AppState: ObservableObject {
         if let cwds = sessionWatcher?.sessionCwds {
             for (sid, cwd) in cwds {
                 sessionCwds[sid] = cwd
+            }
+        }
+    }
+
+    // MARK: - Budget Check (Feature 3)
+
+    private func checkBudget() {
+        let config = ConfigLoader.load()
+        guard config.dailyBudgetEUR > 0 else { return }
+
+        // Reset thresholds on new day
+        let today = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
+        if today != budgetAlertDay {
+            triggeredBudgetThresholds.removeAll()
+            budgetAlertDay = today
+        }
+
+        let totalCost = Array(metricsEngine.sessions.values).map(\.costEUR).reduce(0, +)
+        let fraction = totalCost / config.dailyBudgetEUR
+
+        for threshold in config.budgetAlertThresholds.sorted() {
+            if fraction >= threshold && !triggeredBudgetThresholds.contains(threshold) {
+                triggeredBudgetThresholds.insert(threshold)
+                let pct = Int(threshold * 100)
+                notificationManager.send(
+                    title: "Daily Budget \(pct)%",
+                    body: String(format: "Spent €%.2f of €%.2f budget (%d%%)", totalCost, config.dailyBudgetEUR, Int(fraction * 100))
+                )
             }
         }
     }

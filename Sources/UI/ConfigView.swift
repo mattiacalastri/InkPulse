@@ -7,6 +7,8 @@ struct ConfigView: View {
     @AppStorage("inkpulse_heartbeat_s") private var heartbeatS: Double = 5.0
     @AppStorage("inkpulse_timeout_min") private var timeoutMin: Double = 5.0
     @AppStorage("inkpulse_tail_kb") private var tailKB: Double = 500.0
+    @AppStorage("inkpulse_daily_budget") private var dailyBudget: Double = 0.0
+    @AppStorage("inkpulse_sound_anomaly") private var soundOnAnomaly: Bool = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -68,6 +70,31 @@ struct ConfigView: View {
                     ) {
                         Slider(value: $tailKB, in: 100...2000, step: 100)
                             .frame(width: 100)
+                    }
+
+                    Divider().padding(.vertical, 4)
+
+                    // ── BUDGET & ALERTS ──
+                    sectionHeader("Budget & Alerts")
+
+                    configRow(
+                        icon: "eurosign.circle.fill",
+                        title: "Daily Budget",
+                        subtitle: dailyBudget > 0 ? String(format: "€%.0f", dailyBudget) : "Disabled"
+                    ) {
+                        Slider(value: $dailyBudget, in: 0...50, step: 1)
+                            .frame(width: 100)
+                    }
+
+                    configRow(
+                        icon: "speaker.wave.2.fill",
+                        title: "Sound on Anomaly",
+                        subtitle: soundOnAnomaly ? "On" : "Off"
+                    ) {
+                        Toggle("", isOn: $soundOnAnomaly)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
                     }
 
                     Divider().padding(.vertical, 4)

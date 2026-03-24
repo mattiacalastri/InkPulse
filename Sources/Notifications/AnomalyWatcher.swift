@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 final class AnomalyWatcher {
 
@@ -52,6 +53,11 @@ final class AnomalyWatcher {
                     title: anomaly.notificationTitle,
                     body: anomaly.notificationBody(project: project, snapshot: snapshot)
                 )
+
+                // Feature 5: Sound on anomaly
+                if ConfigLoader.load().soundOnAnomaly {
+                    NSSound(named: "Funk")?.play()
+                }
 
                 cooldowns[cooldownKey] = now.addingTimeInterval(perSessionCooldown)
                 lastGlobalNotification = now

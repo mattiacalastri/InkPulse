@@ -2,6 +2,9 @@ import Foundation
 
 enum JSONLParser {
 
+    /// Maps toolUseID → toolName, populated from assistant events, consumed by progress events.
+    private static var toolNameRegistry: [String: String] = [:]
+
     // MARK: - Public
 
     /// Parse a single JSONL line into a typed ClaudeEvent.
@@ -86,6 +89,7 @@ enum JSONLParser {
         // Content blocks
         var thinkingText: String?
         var outputText: String?
+        var toolUses: [ToolUseInfo] = []
 
         if let contentBlocks = message["content"] as? [[String: Any]] {
             for block in contentBlocks {
@@ -94,6 +98,12 @@ enum JSONLParser {
                     thinkingText = text
                 } else if blockType == "text", let text = block["text"] as? String {
                     outputText = text
+                } else if blockType == "tool_use",
+                          let toolId = block["id"] as? String,
+                          let toolName = block["name"] as? String {
+                    let target = extractToolTarget(from: block["input"] as? [String: Any], toolName: toolName)
+                    toolUses.append(ToolUseInfo(id: toolId, name: toolName, target: target))
+                    toolNameRegistry[toolId] = toolName
                 }
             }
         }
@@ -103,9 +113,45 @@ enum JSONLParser {
             usage: usage,
             thinkingText: thinkingText,
             outputText: outputText,
-            requestId: requestId
+            requestId: requestId,
+            toolUses: toolUses
         )
         return .assistant(msg, timestamp: timestamp, sessionId: sessionId)
+    }
+
+    // MARK: - Tool Target Extraction
+
+    /// Extracts the first meaningful argument from tool_use input. Truncated to 30 chars.
+    private static func extractToolTarget(from input: [String: Any]?, toolName: String) -> String? {
+        guard let input = input else { return nil }
+
+        // Priority: file_path → command → pattern → first string value
+        let keys = ["file_path", "command", "pattern", "query", "url"]
+        for key in keys {
+            if let value = input[key] as? String, !value.isEmpty {
+                return truncateTarget(value)
+            }
+        }
+
+        // Fallback: first string value that is not too long
+        for (_, value) in input {
+            if let str = value as? String, !str.isEmpty, str.count < 200 {
+                return truncateTarget(str)
+            }
+        }
+
+        return nil
+    }
+
+    private static func truncateTarget(_ value: String) -> String {
+        // For file paths, take just the last component
+        if value.contains("/") {
+            let last = URL(fileURLWithPath: value).lastPathComponent
+            if last.count <= 30 { return last }
+            return String(last.prefix(30))
+        }
+        if value.count <= 30 { return value }
+        return String(value.prefix(30))
     }
 
     // MARK: - Progress
@@ -123,8 +169,17 @@ enum JSONLParser {
             || lowered.contains("blocked")
             || lowered.contains("failed")
 
+        // Resolve tool name from registry
+        let toolName: String?
+        if let id = toolUseID {
+            toolName = toolNameRegistry[id]
+        } else {
+            toolName = nil
+        }
+
         return .progress(
             toolUseID: toolUseID,
+            toolName: toolName,
             isToolUse: isToolUse,
             isError: isError,
             timestamp: timestamp,

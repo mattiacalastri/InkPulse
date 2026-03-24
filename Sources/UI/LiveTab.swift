@@ -50,6 +50,16 @@ struct LiveTab: View {
         snaps.map(\.subagentCount).reduce(0, +)
     }
 
+    private var avgContextPercent: Double {
+        let withCtx = snaps.filter { $0.lastContextTokens > 0 }
+        guard !withCtx.isEmpty else { return 0 }
+        return withCtx.map(\.contextPercent).reduce(0, +) / Double(withCtx.count)
+    }
+
+    private var config: InkPulseConfig {
+        ConfigLoader.load()
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -66,6 +76,12 @@ struct LiveTab: View {
                 // ── STATS GRID ──
                 statsGrid
                     .padding(.horizontal, 28).padding(.vertical, 20)
+
+                // ── DAILY BUDGET BAR (Feature 3) ──
+                if config.dailyBudgetEUR > 0 {
+                    dailyBudgetBar
+                        .padding(.horizontal, 28).padding(.bottom, 12)
+                }
 
                 Divider().overlay(Color(hex: "#00d4aa").opacity(0.2))
 
@@ -86,7 +102,7 @@ struct LiveTab: View {
                     .padding(.horizontal, 28).padding(.bottom, 20)
             }
         }
-        .frame(minWidth: 580, minHeight: 520)
+        .frame(minWidth: 580, minHeight: 640)
     }
 
     // MARK: - Header
@@ -122,6 +138,19 @@ struct LiveTab: View {
 
             Spacer()
 
+            // EGI glyph (global)
+            if appState.metricsEngine.globalEGIState > .dormant {
+                VStack(alignment: .center, spacing: 2) {
+                    EGIGlyphView(state: appState.metricsEngine.globalEGIState, size: 32)
+                    if appState.metricsEngine.egiWindowCount > 1 {
+                        Text("\(appState.metricsEngine.egiWindowCount) windows")
+                            .font(.system(size: 8, design: .monospaced))
+                            .foregroundStyle(Color(hex: "#FFD700").opacity(0.6))
+                    }
+                }
+                .padding(.trailing, 8)
+            }
+
             // Health score
             if health >= 0 {
                 VStack(alignment: .trailing, spacing: 0) {
@@ -154,6 +183,8 @@ struct LiveTab: View {
             dashDivider()
             dashStat("cost", String(format: "€%.2f", totalCost), color: .white)
             dashDivider()
+            dashStat("ctx", avgContextPercent > 0 ? String(format: "%.0f%%", avgContextPercent * 100) : "—", color: contextStatColor(avgContextPercent))
+            dashDivider()
             dashStat("agents", "\(totalAgents)", color: Color(hex: "#4A9EFF"))
             dashDivider()
             dashStat("tok/agent", String(format: "%.0f", throughputPerAgent), color: .white.opacity(0.7))
@@ -185,6 +216,57 @@ struct LiveTab: View {
         Rectangle()
             .fill(Color.white.opacity(0.06))
             .frame(width: 1, height: 36)
+    }
+
+    private func contextStatColor(_ percent: Double) -> Color {
+        if percent <= 0 { return .white.opacity(0.3) }
+        return contextColor(for: percent)
+    }
+
+    // MARK: - Daily Budget Bar (Feature 3)
+
+    private var dailyBudgetBar: some View {
+        let budget = config.dailyBudgetEUR
+        let spent = totalCost
+        let fraction = budget > 0 ? spent / budget : 0
+        let budgetColor: Color = {
+            if fraction < 0.60 { return Color(hex: "#00d4aa") }
+            if fraction < 0.80 { return Color(hex: "#FFA500") }
+            return Color(hex: "#FF4444")
+        }()
+
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("DAILY BUDGET")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.4))
+                Spacer()
+                Text(String(format: "€%.2f / €%.2f", spent, budget))
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(budgetColor)
+            }
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.white.opacity(0.06))
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(budgetColor)
+                        .frame(width: geo.size.width * CGFloat(min(max(fraction, 0), 1.0)))
+                }
+            }
+            .frame(height: 6)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.white.opacity(0.02))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color(hex: "#00d4aa").opacity(0.08), lineWidth: 1)
+                )
+        )
     }
 
     // MARK: - ECG
@@ -269,7 +351,7 @@ struct LiveTab: View {
                         }
                     }
                 }
-                .frame(maxHeight: 200)
+                .frame(maxHeight: 400)
             }
         }
     }
