@@ -164,7 +164,7 @@ struct PopoverView: View {
                     }
                     .padding(.horizontal, 12).padding(.vertical, 6)
                 }
-                .frame(maxHeight: 500)
+                .frame(maxHeight: 700)
             }
 
             Divider().padding(.horizontal, 8)
