@@ -29,7 +29,7 @@ struct ReportsTab: View {
 
             VStack(spacing: 0) {
                 // Segmented picker
-                Picker("Period", selection: $selectedPeriod) {
+                Picker("", selection: $selectedPeriod) {
                     ForEach(Period.allCases, id: \.self) { period in
                         Text(period.rawValue).tag(period)
                     }
@@ -81,8 +81,31 @@ private struct ReportsContentView: View {
         return records.map(\.cacheHit).reduce(0, +) / Double(records.count)
     }
 
-    private var anomalyRecords: [HeartbeatRecord] {
-        Array(records.filter { $0.anomaly != nil }.suffix(20))
+    // Downsample for clean ECG line
+    private var ecgData: [(index: Int, health: Int)] {
+        guard records.count > 2 else {
+            return records.enumerated().map { ($0.offset, $0.element.health) }
+        }
+        let step = max(1, records.count / 200)
+        var result: [(index: Int, health: Int)] = []
+        for i in stride(from: 0, to: records.count, by: step) {
+            result.append((index: i, health: records[i].health))
+        }
+        if result.last?.index != records.count - 1 {
+            result.append((index: records.count - 1, health: records.last!.health))
+        }
+        return result
+    }
+
+    // Grouped anomalies
+    private var groupedAnomalies: [(type: String, count: Int, avgHealth: Int, firstTs: String, lastTs: String)] {
+        let anomalyRecords = records.filter { $0.anomaly != nil }
+        let grouped = Dictionary(grouping: anomalyRecords, by: { $0.anomaly ?? "" })
+        return grouped.map { type, recs in
+            let avg = recs.map(\.health).reduce(0, +) / recs.count
+            let sorted = recs.sorted { $0.ts < $1.ts }
+            return (type: type, count: recs.count, avgHealth: avg, firstTs: sorted.first?.ts ?? "", lastTs: sorted.last?.ts ?? "")
+        }.sorted { $0.count > $1.count }
     }
 
     private var toolFreqData: [(index: Int, value: Double)] {
@@ -147,10 +170,37 @@ private struct ReportsContentView: View {
                 }
             }
 
-            // 5 — Anomaly log
-            if !anomalyRecords.isEmpty {
-                sectionLabel("ANOMALY LOG")
-                anomalyLog
+            // 5 — Anomaly log (grouped)
+            if !groupedAnomalies.isEmpty {
+                sectionLabel("ANOMALY LOG — \(records.filter { $0.anomaly != nil }.count) total")
+                VStack(spacing: 6) {
+                    ForEach(Array(groupedAnomalies.enumerated()), id: \.offset) { _, group in
+                        HStack(spacing: 10) {
+                            Circle()
+                                .fill(Color(hex: "#FF4444"))
+                                .frame(width: 6, height: 6)
+                            Text(group.type)
+                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(Color(hex: "#FF4444"))
+                            Text("×\(group.count)")
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Color(hex: "#FF4444").opacity(0.7))
+                            Spacer()
+                            Text(formatTimestamp(group.firstTs) + (group.count > 1 ? " → " + formatTimestamp(group.lastTs) : ""))
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.3))
+                            Text("avg \(group.avgHealth)")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundStyle(healthColor(for: group.avgHealth))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color(hex: "#FF4444").opacity(0.05))
+                        )
+                    }
+                }
             }
 
             // 6 — Insights
@@ -252,32 +302,27 @@ private struct ReportsContentView: View {
             if records.isEmpty {
                 emptyChart("No data for selected period")
             } else {
-                Chart {
-                    ForEach(Array(records.enumerated()), id: \.offset) { idx, record in
-                        AreaMark(
-                            x: .value("Index", idx),
-                            y: .value("Health", record.health)
-                        )
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [
-                                    Color(hex: "#00d4aa").opacity(0.25),
-                                    Color(hex: "#00d4aa").opacity(0.02)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .interpolationMethod(.catmullRom)
+                Chart(ecgData, id: \.index) { point in
+                    LineMark(
+                        x: .value("Index", point.index),
+                        y: .value("Health", point.health)
+                    )
+                    .foregroundStyle(Color(hex: "#00d4aa"))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+                    .interpolationMethod(.catmullRom)
 
-                        LineMark(
-                            x: .value("Index", idx),
-                            y: .value("Health", record.health)
+                    AreaMark(
+                        x: .value("Index", point.index),
+                        y: .value("Health", point.health)
+                    )
+                    .foregroundStyle(
+                        .linearGradient(
+                            colors: [Color(hex: "#00d4aa").opacity(0.15), Color.clear],
+                            startPoint: .top,
+                            endPoint: .bottom
                         )
-                        .foregroundStyle(Color(hex: "#00d4aa"))
-                        .lineStyle(StrokeStyle(lineWidth: 1.5))
-                        .interpolationMethod(.catmullRom)
-                    }
+                    )
+                    .interpolationMethod(.catmullRom)
                 }
                 .chartXAxis(.hidden)
                 .chartYAxis {
@@ -397,14 +442,16 @@ private struct ReportsContentView: View {
 
     private func toolFreqBuckets() -> [(label: String, count: Int)] {
         let maxFreq = records.map(\.toolFreq).max() ?? 20
-        let binSize = max(maxFreq / 8, 1)
+        let binSize = max(maxFreq / 6, 1)
         var bins: [Int: Int] = [:]
         for r in records {
             let bin = Int(r.toolFreq / binSize)
             bins[bin, default: 0] += 1
         }
         return bins.keys.sorted().map { bin in
-            let label = String(format: "%.0f", Double(bin) * binSize)
+            let low = Int(Double(bin) * binSize)
+            let high = Int(Double(bin + 1) * binSize)
+            let label = "\(low)-\(high)"
             return (label: label, count: bins[bin] ?? 0)
         }
     }
@@ -459,44 +506,6 @@ private struct ReportsContentView: View {
             Text(label)
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.4))
-        }
-    }
-
-    // MARK: - Anomaly Log
-
-    private var anomalyLog: some View {
-        VStack(spacing: 5) {
-            ForEach(Array(anomalyRecords.reversed().enumerated()), id: \.offset) { _, record in
-                HStack(spacing: 10) {
-                    Circle()
-                        .fill(Color(hex: "#FF4444"))
-                        .frame(width: 6, height: 6)
-
-                    Text(formatTimestamp(record.ts))
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.35))
-
-                    Text(record.anomaly ?? "")
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color(hex: "#FF4444"))
-
-                    Spacer()
-
-                    Text("h:\(record.health)")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(healthColor(for: record.health))
-
-                    Text(String(format: "€%.3f", record.costEur))
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.4))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color(hex: "#FF4444").opacity(0.05))
-                )
-            }
         }
     }
 
