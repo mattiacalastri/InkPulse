@@ -200,3 +200,35 @@ enum HealthScore {
         return nil
     }
 }
+
+// MARK: - Notification Text
+
+extension Anomaly {
+    var notificationTitle: String {
+        switch self {
+        case .hemorrhage:   return "Token Hemorrhage"
+        case .explosion:    return "Agent Explosion"
+        case .loop:         return "Error Loop"
+        case .stall:        return "Session Stall"
+        case .deepThinking: return "Deep Thinking"
+        }
+    }
+
+    func notificationBody(project: String, snapshot: MetricsSnapshot) -> String {
+        switch self {
+        case .hemorrhage:
+            let sessionHours = max(Date().timeIntervalSince(snapshot.startTime) / 3600, 1.0 / 60.0)
+            let rate = snapshot.costEUR / sessionHours
+            let cachePct = Int(snapshot.cacheHit * 100)
+            return "\(project) burning €\(String(format: "%.1f", rate))/h — cache \(cachePct)%"
+        case .explosion:
+            return "\(project) spawned \(snapshot.subagentCount) agents"
+        case .loop:
+            return "\(project) looping — \(String(format: "%.0f", snapshot.toolFreq)) tool calls/min, \(Int(snapshot.errorRate * 100))% errors"
+        case .stall:
+            return "\(project) stalled — \(String(format: "%.0f", snapshot.idleAvgS))s avg idle"
+        case .deepThinking:
+            return "\(project) thinking deeply — ratio \(String(format: "%.1f", snapshot.thinkOutputRatio ?? 0))"
+        }
+    }
+}
