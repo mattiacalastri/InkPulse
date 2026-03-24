@@ -16,7 +16,7 @@ struct TrendsTab: View {
             Color(hex: "#0a0f1a").ignoresSafeArea()
 
             VStack(spacing: 0) {
-                Picker("Period", selection: $selectedPeriod) {
+                Picker("", selection: $selectedPeriod) {
                     ForEach(Period.allCases, id: \.self) { period in
                         Text(period.rawValue).tag(period)
                     }
