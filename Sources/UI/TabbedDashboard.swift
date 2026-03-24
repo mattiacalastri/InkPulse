@@ -16,7 +16,7 @@ struct TabbedDashboard: View {
                     Label("Trends", systemImage: "chart.xyaxis.line")
                 }
 
-            Text("Reports — coming soon")
+            ReportsTab(appState: appState)
                 .tabItem {
                     Label("Reports", systemImage: "doc.text.chart.fill")
                 }
