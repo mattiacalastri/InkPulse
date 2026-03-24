@@ -3,12 +3,27 @@ import UserNotifications
 
 final class NotificationManager {
 
-    private let center = UNUserNotificationCenter.current()
+    private var center: UNUserNotificationCenter?
     private var isAuthorized = false
+
+    private func getCenter() -> UNUserNotificationCenter? {
+        if center == nil {
+            // UNUserNotificationCenter crashes if bundle has no identifier (SwiftPM debug builds)
+            guard Bundle.main.bundleIdentifier != nil else {
+                return nil
+            }
+            center = UNUserNotificationCenter.current()
+        }
+        return center
+    }
 
     // MARK: - Authorization
 
     func requestAuthorization() {
+        guard let center = getCenter() else {
+            AppState.log("Notifications unavailable (no bundle identifier)")
+            return
+        }
         center.requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
             DispatchQueue.main.async {
                 self?.isAuthorized = granted
@@ -23,7 +38,7 @@ final class NotificationManager {
     // MARK: - Send
 
     func send(title: String, body: String) {
-        guard isAuthorized else { return }
+        guard isAuthorized, let center = getCenter() else { return }
 
         let content = UNMutableNotificationContent()
         content.title = title
