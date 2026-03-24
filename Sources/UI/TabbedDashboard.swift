@@ -11,7 +11,7 @@ struct TabbedDashboard: View {
                     Label("Live", systemImage: "waveform.path.ecg")
                 }
 
-            Text("Trends — coming soon")
+            TrendsTab(appState: appState)
                 .tabItem {
                     Label("Trends", systemImage: "chart.xyaxis.line")
                 }
