@@ -1,6 +1,6 @@
 # InkPulse v1.1 — Feature Batch Spec
 > Intervista: sess.460, 24 Mar 2026
-> Stato: SPEC PRONTA — implementare in sessione separata
+> Stato: IMPLEMENTATA E VERIFICATA — sess.460+461, 24 Mar 2026
 
 ---
 
