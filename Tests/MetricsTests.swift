@@ -29,7 +29,8 @@ final class MetricsTests: XCTestCase {
             usage: usage,
             thinkingText: thinkingText,
             outputText: outputText,
-            requestId: nil
+            requestId: nil,
+            toolUses: []
         )
         return .assistant(msg, timestamp: baseDate.addingTimeInterval(offset), sessionId: sid)
     }
@@ -37,6 +38,7 @@ final class MetricsTests: XCTestCase {
     private func makeToolEvent(isError: Bool = false, at offset: TimeInterval = 0) -> ClaudeEvent {
         .progress(
             toolUseID: "tool-\(UUID().uuidString.prefix(4))",
+            toolName: "Bash",
             isToolUse: true,
             isError: isError,
             timestamp: baseDate.addingTimeInterval(offset),
