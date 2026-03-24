@@ -6,6 +6,7 @@ final class AppState: ObservableObject {
     @Published var metricsEngine = MetricsEngine()
     @Published var tokenHistory: [Double] = []
     @Published var isPaused = false
+    @Published var historyStore = HistoryStore()
         @Published var sessionFilePaths: [String: String] = [:] // sessionId → filePath
     @Published var sessionCwds: [String: String] = [:] // sessionId → cwd
 
@@ -38,6 +39,7 @@ final class AppState: ObservableObject {
         sessionWatcher?.restoreOffsets(offsets)
 
         sessionWatcher?.start()
+        historyStore.start()
         Self.log("Started. Watching: \(projectsDir.path)")
 
         // 1s refresh timer
