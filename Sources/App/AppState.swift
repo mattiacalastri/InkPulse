@@ -19,6 +19,11 @@ final class AppState: ObservableObject {
 
     private let maxTokenHistory = 300  // ~5 min at 1 sample/s
 
+    /// Previous aggregate health for delta arrow.
+    private var previousHealth: Int = -1
+    /// Previous average tok/min for delta arrow.
+    private var previousTokenMin: Double = 0
+
     /// Budget alert thresholds already triggered today (Feature 3).
     private var triggeredBudgetThresholds: Set<Double> = []
     private var budgetAlertDay: Int = -1  // day of year for reset
@@ -70,6 +75,9 @@ final class AppState: ObservableObject {
 
     private func refresh() {
         guard !isPaused else { return }
+        previousHealth = metricsEngine.aggregateHealth
+        let oldSnaps = Array(metricsEngine.sessions.values)
+        previousTokenMin = oldSnaps.isEmpty ? 0 : oldSnaps.map(\.tokenMin).reduce(0, +) / Double(oldSnaps.count)
         metricsEngine.refreshSnapshots()
 
         // Append average tokenMin to history for sparkline
@@ -140,6 +148,21 @@ final class AppState: ObservableObject {
                 )
             }
         }
+    }
+
+    // MARK: - Deltas
+
+    var healthDelta: Int {
+        let current = metricsEngine.aggregateHealth
+        guard current >= 0, previousHealth >= 0 else { return 0 }
+        return current - previousHealth
+    }
+
+    var tokenMinDelta: Double {
+        let snaps = Array(metricsEngine.sessions.values)
+        guard !snaps.isEmpty else { return 0 }
+        let current = snaps.map(\.tokenMin).reduce(0, +) / Double(snaps.count)
+        return current - previousTokenMin
     }
 
     // MARK: - Actions

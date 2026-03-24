@@ -157,6 +157,11 @@ struct LiveTab: View {
                     Text("\(health)")
                         .font(.system(size: 48, weight: .bold, design: .rounded))
                         .foregroundStyle(healthColor(for: health))
+                    if appState.healthDelta != 0 {
+                        Text(appState.healthDelta > 0 ? "\u{2191}\(appState.healthDelta)" : "\u{2193}\(abs(appState.healthDelta))")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(appState.healthDelta > 0 ? Color(hex: "#00d4aa") : Color(hex: "#FF4444"))
+                    }
                     Text("HEALTH")
                         .font(.system(size: 10, weight: .semibold, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.4))
@@ -173,7 +178,7 @@ struct LiveTab: View {
 
     private var statsGrid: some View {
         HStack(spacing: 0) {
-            dashStat("tok/min", String(format: "%.0f", avgTokenMin), color: .white)
+            dashStat("tok/min", String(format: "%.0f", avgTokenMin) + trendArrow(appState.tokenMinDelta), color: .white)
             dashDivider()
             dashStat("peak", String(format: "%.0f", peakTokenMin), color: Color(hex: "#00d4aa"))
             dashDivider()
@@ -221,6 +226,12 @@ struct LiveTab: View {
     private func contextStatColor(_ percent: Double) -> Color {
         if percent <= 0 { return .white.opacity(0.3) }
         return contextColor(for: percent)
+    }
+
+    private func trendArrow(_ delta: Double) -> String {
+        if delta > 20 { return " \u{2191}" }
+        if delta < -20 { return " \u{2193}" }
+        return ""
     }
 
     // MARK: - Daily Budget Bar (Feature 3)

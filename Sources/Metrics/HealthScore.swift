@@ -108,7 +108,17 @@ enum HealthScore {
             rawScore = 50.0
         }
 
-        let clampedScore = Int(min(max(rawScore, 0.0), 100.0))
+        // ── Stall duration penalty ──
+        // If idle > 2min, progressively penalize health.
+        // 2min idle = -10, 5min = -25, 10min = -50
+        var adjustedScore = rawScore
+        if idleAvgS > 120 {
+            let idleMinutes = idleAvgS / 60.0
+            let penalty = min(idleMinutes * 5.0, 60.0)  // cap at -60
+            adjustedScore -= penalty
+        }
+
+        let clampedScore = Int(min(max(adjustedScore, 0.0), 100.0))
 
         // Anomaly detection (checked in order)
         let anomaly = detectAnomaly(
@@ -181,7 +191,7 @@ enum HealthScore {
             return .deepThinking
         }
 
-        if tokenMin < 10.0, idleAvgS > 30.0 {
+        if tokenMin < 10.0, idleAvgS > 15.0 {
             return .stall
         }
 

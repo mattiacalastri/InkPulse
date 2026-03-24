@@ -66,6 +66,33 @@ final class AnomalyWatcher {
             previousState[sessionId] = currentAnomaly
         }
 
+        // Health-based alert: notify when any session drops below 50
+        for (sessionId, snapshot) in sessions {
+            if snapshot.health < 50 {
+                let healthKey = "\(sessionId):low_health"
+                if let expiry = cooldowns[healthKey], now < expiry { continue }
+                if now.timeIntervalSince(lastGlobalNotification) < globalCooldown { continue }
+
+                let project = projectName(
+                    from: sessionId,
+                    filePath: nil,
+                    cwd: sessionCwds[sessionId]
+                )
+
+                notificationManager.send(
+                    title: "Health Critical",
+                    body: "\(project) health dropped to \(snapshot.health) — investigate"
+                )
+
+                if ConfigLoader.load().soundOnAnomaly {
+                    NSSound(named: "Funk")?.play()
+                }
+
+                cooldowns[healthKey] = now.addingTimeInterval(perSessionCooldown)
+                lastGlobalNotification = now
+            }
+        }
+
         // Clean up stale entries
         let activeIds = Set(sessions.keys)
         for id in previousState.keys where !activeIds.contains(id) {

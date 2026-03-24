@@ -12,15 +12,23 @@ enum Pricing {
     // MARK: - Model Table (USD per 1M tokens)
 
     static let models: [String: ModelPricing] = [
-        "claude-opus-4":   ModelPricing(inputPerMillion: 15.0,  outputPerMillion: 75.0),
-        "claude-sonnet-4": ModelPricing(inputPerMillion: 3.0,   outputPerMillion: 15.0),
-        "claude-haiku-3.5":  ModelPricing(inputPerMillion: 0.25,  outputPerMillion: 1.25),
+        // Claude 4.x
+        "claude-opus-4":          ModelPricing(inputPerMillion: 15.0,  outputPerMillion: 75.0),
+        "claude-opus-4-6":        ModelPricing(inputPerMillion: 15.0,  outputPerMillion: 75.0),
+        "claude-sonnet-4":        ModelPricing(inputPerMillion: 3.0,   outputPerMillion: 15.0),
+        "claude-sonnet-4-6":      ModelPricing(inputPerMillion: 3.0,   outputPerMillion: 15.0),
+        "claude-haiku-4-5":       ModelPricing(inputPerMillion: 0.80,  outputPerMillion: 4.0),
+        // Claude 3.5
+        "claude-3-5-sonnet":      ModelPricing(inputPerMillion: 3.0,   outputPerMillion: 15.0),
+        "claude-3-5-haiku":       ModelPricing(inputPerMillion: 0.80,  outputPerMillion: 4.0),
+        // Legacy
+        "claude-haiku-3.5":       ModelPricing(inputPerMillion: 0.25,  outputPerMillion: 1.25),
     ]
 
     // MARK: - EUR/USD
 
-    /// 1 USD = 0.92 EUR
-    static let eurUsdRate: Double = 0.92
+    /// 1 USD = 0.91 EUR
+    static let eurUsdRate: Double = 0.91
 
     // MARK: - Cache Discounts
 
@@ -28,6 +36,18 @@ enum Pricing {
     static let cacheReadDiscount: Double = 0.90
     /// Cache creation tokens cost 25% more than regular input tokens.
     static let cacheCreationSurcharge: Double = 0.25
+
+    // MARK: - Model Lookup
+
+    /// Find pricing for a model, handling date-suffixed variants like "claude-opus-4-6-20251001".
+    static func findPricing(for model: String) -> ModelPricing? {
+        if let p = models[model] { return p }
+        // Strip date suffix (e.g., "-20251001")
+        let stripped = model.replacingOccurrences(of: #"-\d{8,}$"#, with: "", options: .regularExpression)
+        if let p = models[stripped] { return p }
+        // Try prefix match
+        return models.first(where: { model.hasPrefix($0.key) })?.value
+    }
 
     // MARK: - Cost Calculation
 
@@ -47,7 +67,7 @@ enum Pricing {
         cacheReadTokens: Int = 0,
         cacheCreationTokens: Int = 0
     ) -> Double? {
-        guard let pricing = models[model] else { return nil }
+        guard let pricing = findPricing(for: model) else { return nil }
 
         let inputCostUSD = Double(inputTokens) / 1_000_000.0 * pricing.inputPerMillion
         let outputCostUSD = Double(outputTokens) / 1_000_000.0 * pricing.outputPerMillion
