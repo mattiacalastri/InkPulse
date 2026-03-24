@@ -60,9 +60,24 @@ InkPulseApp
 | File | Change |
 |------|--------|
 | InkPulseApp.swift | Window body uses TabbedDashboard instead of DashboardView |
-| AppState.swift | Adds NotificationManager, AnomalyWatcher, HistoryStore properties. Wires AnomalyWatcher into refresh cycle. |
-| Package.swift | No changes needed — Swift Charts is a system framework, no new dependencies |
-| Info.plist | Add NSUserNotificationsUsageDescription |
+| AppState.swift | Adds NotificationManager, AnomalyWatcher, HistoryStore as @Published properties. Wires AnomalyWatcher into refresh cycle. |
+| Package.swift | platforms remains `.macOS(.v14)`. Swift Charts and UserNotifications are system frameworks — `import Charts` and `import UserNotifications` resolve automatically against the macOS SDK in both `swift build` and Xcode. No `.linkedFramework` needed. Verified: SPM resolves system frameworks at link time via the SDK path. |
+| Info.plist | Located at `/Applications/InkPulse.app/Contents/Info.plist` (created during deploy step, not in SPM source tree). The deploy script copies binary + Info.plist + Resources into the .app bundle. UNUserNotificationCenter requires a valid .app bundle with code identity — the existing deploy process already produces this. Add `NSUserNotificationsUsageDescription`. |
+
+### 5.1 State Injection Pattern
+
+All three tabs receive `appState` via `@ObservedObject` parameter injection (same pattern as existing `PopoverView` and `DashboardView`). No `@EnvironmentObject` — explicit dependency passing is simpler and consistent with the v1 codebase.
+
+```swift
+// TabbedDashboard passes appState to each tab:
+TabView {
+    LiveTab(appState: appState).tabItem { ... }
+    TrendsTab(appState: appState).tabItem { ... }
+    ReportsTab(appState: appState).tabItem { ... }
+}
+```
+
+Each tab accesses `appState.historyStore` for historical data and `appState.metricsEngine` for live data.
 
 ## 6. Trends Tab Detail
 
@@ -71,17 +86,22 @@ InkPulseApp
 ```swift
 struct DaySummary {
     let date: Date
-    let avgHealth: Int
+    let avgHealth: Int          // Int intentionally — consistent with MetricsSnapshot.health
+                                 // and HealthResult.score across the entire codebase.
+                                 // Precision loss from integer averaging is acceptable for
+                                 // dashboard display. Charts use raw records for interpolation.
     let totalCost: Double
     let peakTokenMin: Double
-    let totalSessions: Int
+    let totalSessions: Int       // Count of unique sessionIds in the day's records
     let activeMinutes: Double
     let anomalyCount: Int
     let avgCacheHit: Double
     let avgErrorRate: Double
-    let records: [HeartbeatRecord] // raw data for drill-down
+    let records: [HeartbeatRecord] // raw data for drill-down and chart interpolation
 }
 ```
+
+**"Worst session" definition** (used in Week View §6.3): Group all `HeartbeatRecord` entries by `sessionId`. For each session, compute `avgHealth = records.map(\.health).reduce(0,+) / records.count`. Sort ascending by `avgHealth`. Take top 3. Display: sessionId prefix, project name, avgHealth, anomaly count.
 
 ### 6.2 Today View
 - ECG Extended: full-width LineMark of all today's datapoints (not just last 300s)
@@ -95,7 +115,7 @@ struct DaySummary {
 - Worst sessions: top 3 lowest-health sessions of the week
 
 ### 6.4 Month View
-- Heatmap: 7×5 grid (Mon-Sun × weeks) colored by avg health. GitHub-contributions style, teal palette.
+- Heatmap: Calendar-aligned grid (Mon-Sun × weeks of the month) colored by avg health. GitHub-contributions style, teal palette. **Missing days** (no heartbeat file = no Claude usage) render as dark grey cells with no value — they are not zero, they are absent. The grid always shows the full calendar month, not just days with data.
 - Cumulative cost: AreaMark rising day by day with dashed projection to month end
 - Usage pattern: bar chart of active hours per weekday (when you work most)
 - Monthly summary: total cost, total sessions, total anomalies, health trend direction
@@ -108,7 +128,9 @@ HistoryStore reads `~/.inkpulse/heartbeats/heartbeat-YYYY-MM-DD.jsonl` files.
 - `loadWeek()`: reads last 7 files, aggregates into `[DaySummary]`
 - `loadMonth()`: reads last 30 files, aggregates into `[DaySummary]`
 - Parsing is lazy: stream lines, decode one at a time, never load full file into memory
-- Refresh interval: 60 seconds (historical data doesn't change fast)
+- Refresh intervals:
+  - `loadToday()`: 10 seconds (near-real-time for today's ECG, reduces visible lag vs Live tab's 1s)
+  - `loadWeek()` / `loadMonth()`: 60 seconds (historical data doesn't change fast)
 - Cache: in-memory cache of loaded DaySummary, invalidated on refresh
 
 ## 7. Notification System Detail
@@ -117,17 +139,38 @@ HistoryStore reads `~/.inkpulse/heartbeats/heartbeat-YYYY-MM-DD.jsonl` files.
 
 Runs inside AppState's existing 1s refresh cycle. After `metricsEngine.refreshSnapshots()`:
 
+```swift
+// Critical anomaly set — only these trigger notifications
+static let criticalAnomalies: Set<Anomaly> = [.hemorrhage, .explosion, .loop]
+
+for (sessionId, snapshot) in metricsEngine.sessions {
+    // Convert String? → Anomaly? via rawValue
+    let currentAnomaly: Anomaly? = snapshot.anomaly.flatMap { Anomaly(rawValue: $0) }
+    let previousAnomaly: Anomaly? = previousAnomalyState[sessionId]
+
+    if let anomaly = currentAnomaly,
+       Self.criticalAnomalies.contains(anomaly),
+       previousAnomaly == nil {
+        if !isInCooldown(sessionId: sessionId, anomaly: anomaly) {
+            let project = projectName(from: sessionId, ...)
+            notificationManager.send(
+                title: anomaly.notificationTitle,   // e.g. "Token Hemorrhage"
+                body: anomaly.notificationBody(project: project, snapshot: snapshot)
+            )
+            setCooldown(sessionId: sessionId, anomaly: anomaly)
+        }
+    }
+
+    previousAnomalyState[sessionId] = currentAnomaly
+}
 ```
-for each session in metricsEngine.sessions:
-    currentAnomaly = session.anomaly
-    previousAnomaly = previousAnomalyState[session.sessionId]
 
-    if currentAnomaly is critical AND previousAnomaly was nil:
-        if not in cooldown for this session+anomaly:
-            notificationManager.send(anomaly, session)
-            set cooldown
-
-    previousAnomalyState[session.sessionId] = currentAnomaly
+**Anomaly extension for notification text** (added to HealthScore.swift):
+```swift
+extension Anomaly {
+    var notificationTitle: String { ... }  // "Token Hemorrhage", "Agent Explosion", "Error Loop"
+    func notificationBody(project: String, snapshot: MetricsSnapshot) -> String { ... }
+}
 ```
 
 ### 7.2 Anti-Spam Logic
@@ -149,7 +192,7 @@ for each session in metricsEngine.sessions:
 ### 7.4 NotificationManager
 
 - `requestAuthorization()`: called once at app launch. Requests `.alert, .sound, .badge`.
-- `send(title:body:)`: creates UNMutableNotificationContent with custom sound, schedules immediately.
+- `send(title: String, body: String)`: the single public API. AnomalyWatcher formats the title/body using `Anomaly.notificationTitle` and `Anomaly.notificationBody(project:snapshot:)`, then calls this method. NotificationManager only knows about strings — it does not import or understand `Anomaly`.
 - Custom sound: `UNNotificationSound(named: UNNotificationSoundName("inkpulse_alert.aiff"))`
 - Sound file must be in the app bundle's Resources, format: Linear PCM, MA4, uLaw, aLaw, .aiff/.wav/.caf, ≤30 seconds.
 
@@ -180,15 +223,18 @@ TrendsTab and ReportsTab both consume HistoryStore data. No duplication — Hist
 
 ### 8.3 Legacy ReportGenerator
 
-Kept as-is for external HTML export (button in Reports tab: "Export HTML"). Not the primary view anymore.
+Kept as-is for **opt-in** external HTML export. The Reports tab includes a secondary "Export HTML" button (small, bottom-right, non-prominent) that generates the HTML report via `ReportGenerator.generate()` and opens it in the browser. This is an escape hatch for sharing reports externally — it is NOT the primary reporting experience. The primary experience is the native Swift Charts in-app.
 
 ## 9. Custom Sound Generation
 
-Generate a 1-second .aiff file:
-- Two quick heartbeat pulses (thump-thump) with fade out
-- 440Hz sine wave, 44.1kHz sample rate, 16-bit
-- Generated via `afconvert` or Python script at build time
-- Stored in Resources/inkpulse_alert.aiff
+**Pre-generated and committed to repo** (not generated at build time — SPM has no run-script build phases).
+
+The sound file `Resources/inkpulse_alert.aiff` is:
+- 1 second, two quick heartbeat pulses (thump-thump) with fade out
+- 440Hz sine wave, 44.1kHz sample rate, 16-bit Linear PCM
+- Generated once via Python script (`scripts/generate_alert_sound.py`), then committed as a binary
+- The deploy script copies it into `/Applications/InkPulse.app/Contents/Resources/`
+- SPM includes it via `.copy("../Resources")` in Package.swift (already configured)
 
 ## 10. Info.plist Changes
 
@@ -200,7 +246,7 @@ Add to existing Info.plist:
 
 ## 11. Build Sequence
 
-1. Rename DashboardView.swift → LiveTab.swift (update all references)
+1. Rename DashboardView.swift → LiveTab.swift. Update: struct name `DashboardView` → `LiveTab` inside the file, and the reference in `InkPulseApp.swift` (replaced by TabbedDashboard in step 3). The `@ObservedObject var appState: AppState` pattern remains unchanged.
 2. Create TabbedDashboard.swift (TabView wrapper)
 3. Update InkPulseApp.swift to use TabbedDashboard
 4. Create HistoryStore.swift (persistence layer)
