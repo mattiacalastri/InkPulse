@@ -26,7 +26,7 @@ enum JSONLParser {
         case "progress":
             return parseProgress(root, timestamp: timestamp, sessionId: sessionId)
         case "user":
-            return .user(timestamp: timestamp, sessionId: sessionId)
+            return parseUser(root, timestamp: timestamp, sessionId: sessionId)
         case "system":
             return .system(timestamp: timestamp, sessionId: sessionId)
         case "queue-operation":
@@ -152,6 +152,41 @@ enum JSONLParser {
         }
         if value.count <= 30 { return value }
         return String(value.prefix(30))
+    }
+
+    // MARK: - User (tool_result errors)
+
+    private static func parseUser(_ root: [String: Any], timestamp: Date, sessionId: String) -> ClaudeEvent {
+        var errorCount = 0
+
+        // user events contain tool_result blocks with is_error flag
+        let message = decodeMessage(root["message"]) ?? [:]
+        if let contentBlocks = message["content"] as? [[String: Any]] {
+            for block in contentBlocks {
+                if block["type"] as? String == "tool_result",
+                   let isError = block["is_error"] as? Bool,
+                   isError {
+                    errorCount += 1
+                }
+            }
+        }
+
+        // Also check for error keywords in data field (progress-style user events)
+        if let data = root["data"] as? String {
+            let dataMsg = decodeMessage(data)
+            if let innerMsg = dataMsg?["message"] as? [String: Any],
+               let content = innerMsg["content"] as? [[String: Any]] {
+                for block in content {
+                    if block["type"] as? String == "tool_result",
+                       let isError = block["is_error"] as? Bool,
+                       isError {
+                        errorCount += 1
+                    }
+                }
+            }
+        }
+
+        return .user(errorCount: errorCount, timestamp: timestamp, sessionId: sessionId)
     }
 
     // MARK: - Progress

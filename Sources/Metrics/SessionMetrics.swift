@@ -145,7 +145,15 @@ final class SessionMetrics {
                 completeCount += 1
             }
 
-        case .user, .system, .unknown:
+        case .user(let errorCount, let timestamp, _):
+            // Tool result errors from user events
+            if errorCount > 0 {
+                for _ in 0..<errorCount {
+                    toolEvents.append((date: timestamp, isError: true))
+                }
+            }
+
+        case .system, .unknown:
             break
         }
     }
