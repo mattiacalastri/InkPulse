@@ -5,6 +5,14 @@ struct PopoverView: View {
 
     @State private var expandedSessionId: String?
 
+    private var agentsScrollHeight: CGFloat {
+        let cardHeight: CGFloat = 120
+        let rows = ceil(Double(stats.snaps.count) / 2.0)
+        let expandOffset: CGFloat = expandedSessionId != nil ? 180 : 0
+        let computed = CGFloat(rows) * cardHeight + 20 + expandOffset
+        return min(max(computed, 180), 500)
+    }
+
     // MARK: - Stats
 
     private var stats: DashboardStats { DashboardStats(appState: appState) }
@@ -150,7 +158,7 @@ struct PopoverView: View {
                     }
                     .padding(.horizontal, 12).padding(.vertical, 6)
                 }
-                .frame(height: 350)
+                .frame(height: agentsScrollHeight)
             }
 
             Divider().padding(.horizontal, 8)

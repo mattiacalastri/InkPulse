@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v1.3.0] - 2026-03-25
+
+### Added
+- DashboardStats shared struct — eliminates duplicated computed properties between PopoverView and LiveTab
+- Pillar identity mapping — BTC Bot (teal), AuraHome (gold), Astra (blue), Astra OS (purple) with config overrides
+- activeTaskName parsing from TaskCreate/TaskUpdate tool_use blocks in JSONL
+- Dynamic ScrollView height in popover — adapts to agent count and expanded state
+
+### Fixed
+- activeTaskName was declared but never written (always nil)
+- PopoverView ScrollView hardcoded to 350px regardless of session count
+
 ## [v1.2.0] - 2026-03-23
 
 ### Added
