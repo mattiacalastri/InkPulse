@@ -5,62 +5,9 @@ struct LiveTab: View {
 
     @State private var expandedSessionId: String?
 
-    // MARK: - Computed Stats
+    // MARK: - Stats
 
-    private var snaps: [MetricsSnapshot] {
-        appState.metricsEngine.sessions.values
-            .sorted { $0.lastEventTime > $1.lastEventTime }
-    }
-
-    private var health: Int { appState.metricsEngine.aggregateHealth }
-
-    private var totalCost: Double {
-        snaps.map(\.costEUR).reduce(0, +)
-    }
-
-    private var avgCacheHit: Double {
-        guard !snaps.isEmpty else { return 0 }
-        return snaps.map(\.cacheHit).reduce(0, +) / Double(snaps.count)
-    }
-
-    private var avgErrorRate: Double {
-        guard !snaps.isEmpty else { return 0 }
-        return snaps.map(\.errorRate).reduce(0, +) / Double(snaps.count)
-    }
-
-    private var peakTokenMin: Double {
-        appState.tokenHistory.max() ?? 0
-    }
-
-    private var avgTokenMin: Double {
-        let h = appState.tokenHistory
-        guard !h.isEmpty else { return 0 }
-        return h.reduce(0, +) / Double(h.count)
-    }
-
-    private var uptimeMin: Double {
-        guard let earliest = snaps.map(\.startTime).min() else { return 0 }
-        return Date().timeIntervalSince(earliest) / 60.0
-    }
-
-    private var throughputPerAgent: Double {
-        guard !snaps.isEmpty else { return 0 }
-        return avgTokenMin / Double(snaps.count)
-    }
-
-    private var totalAgents: Int {
-        snaps.map(\.subagentCount).reduce(0, +)
-    }
-
-    private var avgContextPercent: Double {
-        let withCtx = snaps.filter { $0.lastContextTokens > 0 }
-        guard !withCtx.isEmpty else { return 0 }
-        return withCtx.map(\.contextPercent).reduce(0, +) / Double(withCtx.count)
-    }
-
-    private var config: InkPulseConfig {
-        ConfigLoader.load()
-    }
+    private var stats: DashboardStats { DashboardStats(appState: appState) }
 
     // MARK: - Body
 
@@ -80,7 +27,7 @@ struct LiveTab: View {
                     .padding(.horizontal, 28).padding(.vertical, 20)
 
                 // ── DAILY BUDGET BAR (Feature 3) ──
-                if config.dailyBudgetEUR > 0 {
+                if stats.config.dailyBudgetEUR > 0 {
                     dailyBudgetBar
                         .padding(.horizontal, 28).padding(.bottom, 12)
                 }
@@ -136,7 +83,7 @@ struct LiveTab: View {
                 Text("Heartbeat Monitor for Claude Code")
                     .font(.system(size: 13, design: .monospaced))
                     .foregroundStyle(Color(hex: "#00d4aa").opacity(0.7))
-                Text("\(snaps.count) agents · \(Int(uptimeMin))m uptime")
+                Text("\(stats.snaps.count) agents · \(Int(stats.uptimeMin))m uptime")
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.4))
             }
@@ -157,11 +104,11 @@ struct LiveTab: View {
             }
 
             // Health score
-            if health >= 0 {
+            if stats.health >= 0 {
                 VStack(alignment: .trailing, spacing: 0) {
-                    Text("\(health)")
+                    Text("\(stats.health)")
                         .font(.system(size: 52, weight: .bold, design: .rounded))
-                        .foregroundStyle(healthColor(for: health))
+                        .foregroundStyle(healthColor(for: stats.health))
                     if appState.healthDelta != 0 {
                         Text(appState.healthDelta > 0 ? "\u{2191}\(appState.healthDelta)" : "\u{2193}\(abs(appState.healthDelta))")
                             .font(.system(size: 11, weight: .medium, design: .monospaced))
@@ -183,21 +130,21 @@ struct LiveTab: View {
 
     private var statsGrid: some View {
         HStack(spacing: 0) {
-            dashStat("tok/min", String(format: "%.0f", avgTokenMin) + trendArrow(appState.tokenMinDelta), color: .white)
+            dashStat("tok/min", String(format: "%.0f", stats.avgTokenMin) + trendArrow(appState.tokenMinDelta), color: .white)
             dashDivider()
-            dashStat("peak", String(format: "%.0f", peakTokenMin), color: Color(hex: "#00d4aa"))
+            dashStat("peak", String(format: "%.0f", stats.peakTokenMin), color: Color(hex: "#00d4aa"))
             dashDivider()
-            dashStat("cache", String(format: "%.0f%%", avgCacheHit * 100), color: avgCacheHit > 0.8 ? Color(hex: "#00d4aa") : Color(hex: "#FFA500"))
+            dashStat("cache", String(format: "%.0f%%", stats.avgCacheHit * 100), color: stats.avgCacheHit > 0.8 ? Color(hex: "#00d4aa") : Color(hex: "#FFA500"))
             dashDivider()
-            dashStat("err", String(format: "%.1f%%", avgErrorRate * 100), color: avgErrorRate < 0.05 ? Color(hex: "#00d4aa") : Color(hex: "#FF4444"))
+            dashStat("err", String(format: "%.1f%%", stats.avgErrorRate * 100), color: stats.avgErrorRate < 0.05 ? Color(hex: "#00d4aa") : Color(hex: "#FF4444"))
             dashDivider()
-            dashStat("cost", String(format: "€%.2f", totalCost), color: .white)
+            dashStat("cost", String(format: "€%.2f", stats.totalCost), color: .white)
             dashDivider()
-            dashStat("ctx", avgContextPercent > 0 ? String(format: "%.0f%%", avgContextPercent * 100) : "—", color: contextStatColor(avgContextPercent))
+            dashStat("ctx", stats.avgContextPercent > 0 ? String(format: "%.0f%%", stats.avgContextPercent * 100) : "—", color: contextStatColor(stats.avgContextPercent))
             dashDivider()
-            dashStat("subs", "\(totalAgents)", color: Color(hex: "#4A9EFF"))
+            dashStat("subs", "\(stats.totalAgents)", color: Color(hex: "#4A9EFF"))
             dashDivider()
-            dashStat("tok/agent", String(format: "%.0f", throughputPerAgent), color: .white.opacity(0.7))
+            dashStat("tok/agent", String(format: "%.0f", stats.throughputPerAgent), color: .white.opacity(0.7))
         }
         .padding(.vertical, 12)
         .background(
@@ -242,8 +189,8 @@ struct LiveTab: View {
     // MARK: - Daily Budget Bar (Feature 3)
 
     private var dailyBudgetBar: some View {
-        let budget = config.dailyBudgetEUR
-        let spent = totalCost
+        let budget = stats.config.dailyBudgetEUR
+        let spent = stats.totalCost
         let fraction = budget > 0 ? spent / budget : 0
         let budgetColor: Color = {
             if fraction < 0.60 { return Color(hex: "#00d4aa") }
@@ -338,12 +285,12 @@ struct LiveTab: View {
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.5))
                 Spacer()
-                Text("\(snaps.count) sessions")
+                Text("\(stats.snaps.count) sessions")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.25))
             }
 
-            if snaps.isEmpty {
+            if stats.snaps.isEmpty {
                 Text("No active agents")
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.2))
@@ -359,7 +306,7 @@ struct LiveTab: View {
                             ],
                             spacing: 10
                         ) {
-                            ForEach(snaps, id: \.sessionId) { snap in
+                            ForEach(stats.snaps, id: \.sessionId) { snap in
                                 AgentCardView(
                                     snapshot: snap,
                                     filePath: appState.sessionFilePaths[snap.sessionId],
@@ -376,7 +323,7 @@ struct LiveTab: View {
                         }
 
                         if let expandedId = expandedSessionId,
-                           let snap = snaps.first(where: { $0.sessionId == expandedId }) {
+                           let snap = stats.snaps.first(where: { $0.sessionId == expandedId }) {
                             AgentDetailPanel(
                                 snapshot: snap,
                                 cwd: appState.sessionCwds[snap.sessionId]
