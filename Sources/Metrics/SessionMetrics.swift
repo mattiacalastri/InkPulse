@@ -100,6 +100,14 @@ final class SessionMetrics {
                 lastToolTarget = lastTool.target
             }
 
+            // Task name tracking
+            for tool in msg.toolUses {
+                if (tool.name == "TaskCreate" || tool.name == "TaskUpdate"),
+                   let subject = tool.subject {
+                    activeTaskName = subject
+                }
+            }
+
             // Thinking / output estimation
             if let thinkText = msg.thinkingText, !thinkText.isEmpty {
                 // Rough estimate: 4 chars per token

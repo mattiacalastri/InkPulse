@@ -288,8 +288,8 @@ final class EGITests: XCTestCase {
         let session = SessionMetrics(sessionId: sid, startTime: baseDate)
 
         let tools = [
-            ToolUseInfo(id: "t1", name: "Read", target: "AppState.swift"),
-            ToolUseInfo(id: "t2", name: "Edit", target: "LiveTab.swift")
+            ToolUseInfo(id: "t1", name: "Read", target: "AppState.swift", subject: nil),
+            ToolUseInfo(id: "t2", name: "Edit", target: "LiveTab.swift", subject: nil)
         ]
 
         session.ingest(makeAssistantEvent(toolUses: tools, at: 5))

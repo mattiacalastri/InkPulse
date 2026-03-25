@@ -114,8 +114,15 @@ enum JSONLParser {
                 } else if blockType == "tool_use",
                           let toolId = block["id"] as? String,
                           let toolName = block["name"] as? String {
-                    let target = extractToolTarget(from: block["input"] as? [String: Any], toolName: toolName)
-                    toolUses.append(ToolUseInfo(id: toolId, name: toolName, target: target))
+                    let input = block["input"] as? [String: Any]
+                    let target = extractToolTarget(from: input, toolName: toolName)
+                    let subject: String?
+                    if toolName == "TaskCreate" || toolName == "TaskUpdate" {
+                        subject = input?["subject"] as? String
+                    } else {
+                        subject = nil
+                    }
+                    toolUses.append(ToolUseInfo(id: toolId, name: toolName, target: target, subject: subject))
                     registrySet(toolId, toolName)
                 }
             }
