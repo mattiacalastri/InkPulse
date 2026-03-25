@@ -64,14 +64,14 @@ struct LiveTab: View {
 
     var body: some View {
         ZStack {
-            Color(hex: "#0a0f1a").ignoresSafeArea()
+            Color.clear.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // ── HEADER ──
                 header
                     .padding(.horizontal, 28).padding(.top, 24).padding(.bottom, 16)
 
-                Divider().overlay(Color(hex: "#00d4aa").opacity(0.2))
+                Divider().overlay(.white.opacity(0.06))
 
                 // ── STATS GRID ──
                 statsGrid
@@ -103,6 +103,7 @@ struct LiveTab: View {
             }
         }
         .frame(minWidth: 580, minHeight: 640)
+        .background(.ultraThinMaterial)
     }
 
     // MARK: - Header
@@ -128,13 +129,13 @@ struct LiveTab: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("InkPulse")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                 Text("Heartbeat Monitor for Claude Code")
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(.system(size: 13, design: .monospaced))
                     .foregroundStyle(Color(hex: "#00d4aa").opacity(0.7))
                 Text("\(snaps.count) agents · \(Int(uptimeMin))m uptime")
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.4))
             }
 
@@ -157,7 +158,7 @@ struct LiveTab: View {
             if health >= 0 {
                 VStack(alignment: .trailing, spacing: 0) {
                     Text("\(health)")
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .font(.system(size: 52, weight: .bold, design: .rounded))
                         .foregroundStyle(healthColor(for: health))
                     if appState.healthDelta != 0 {
                         Text(appState.healthDelta > 0 ? "\u{2191}\(appState.healthDelta)" : "\u{2193}\(abs(appState.healthDelta))")
@@ -192,17 +193,17 @@ struct LiveTab: View {
             dashDivider()
             dashStat("ctx", avgContextPercent > 0 ? String(format: "%.0f%%", avgContextPercent * 100) : "—", color: contextStatColor(avgContextPercent))
             dashDivider()
-            dashStat("agents", "\(totalAgents)", color: Color(hex: "#4A9EFF"))
+            dashStat("subs", "\(totalAgents)", color: Color(hex: "#4A9EFF"))
             dashDivider()
             dashStat("tok/agent", String(format: "%.0f", throughputPerAgent), color: .white.opacity(0.7))
         }
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.03))
+                .fill(.white.opacity(0.04))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(hex: "#00d4aa").opacity(0.1), lineWidth: 1)
+                        .stroke(.white.opacity(0.08), lineWidth: 1)
                 )
         )
     }
@@ -210,11 +211,11 @@ struct LiveTab: View {
     private func dashStat(_ label: String, _ value: String, color: Color) -> some View {
         VStack(spacing: 4) {
             Text(value)
-                .font(.system(size: 18, weight: .bold, design: .monospaced))
+                .font(.system(size: 20, weight: .bold, design: .monospaced))
                 .foregroundStyle(color)
             Text(label)
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.3))
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.4))
         }
         .frame(maxWidth: .infinity)
     }
@@ -291,12 +292,12 @@ struct LiveTab: View {
                     .foregroundStyle(Color(hex: "#00d4aa"))
                     .font(.caption)
                 Text("ECG")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.5))
                 Spacer()
                 Text("tok/min · \(appState.tokenHistory.count)s window")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.2))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.25))
             }
 
             if appState.tokenHistory.isEmpty {
@@ -332,12 +333,12 @@ struct LiveTab: View {
                     .foregroundStyle(Color(hex: "#00d4aa"))
                     .font(.caption)
                 Text("ACTIVE AGENTS")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.5))
                 Spacer()
                 Text("\(snaps.count) sessions")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.2))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.25))
             }
 
             if snaps.isEmpty {
@@ -355,11 +356,15 @@ struct LiveTab: View {
                                 filePath: appState.sessionFilePaths[snap.sessionId],
                                 cwd: appState.sessionCwds[snap.sessionId]
                             )
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
                             .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.white.opacity(0.03))
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(.white.opacity(0.05))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(.white.opacity(0.06), lineWidth: 1)
+                                    )
                             )
                         }
                     }
@@ -373,9 +378,9 @@ struct LiveTab: View {
 
     private var footer: some View {
         HStack {
-            Text("v1.0.0 · by Mattia Calastri · Astra Digital")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.2))
+            Text("v1.2.0 · by Mattia Calastri · Astra Digital")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.25))
             Spacer()
             Button(action: { appState.openConfig() }) {
                 Label("Config", systemImage: "gearshape.fill")

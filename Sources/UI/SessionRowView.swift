@@ -109,14 +109,13 @@ func agentMood(for snap: MetricsSnapshot) -> (emoji: String, status: String, col
 struct PillarInfo {
     let name: String
     let color: Color
-    let emoji: String
     let shortName: String
 
-    static let bot = PillarInfo(name: "BTC Bot", color: Color(hex: "#FFA500"), emoji: "", shortName: "Bot")
-    static let aurahome = PillarInfo(name: "AuraHome", color: Color(hex: "#00d4aa"), emoji: "", shortName: "AH")
-    static let astra = PillarInfo(name: "Astra", color: Color(hex: "#9B59B6"), emoji: "", shortName: "AD")
-    static let brand = PillarInfo(name: "Brand OS", color: Color(hex: "#C0C0C0"), emoji: "", shortName: "OS")
-    static let home = PillarInfo(name: "Home", color: Color(hex: "#4A9EFF"), emoji: "", shortName: "~")
+    static let bot = PillarInfo(name: "BTC Bot", color: Color(hex: "#FFA500"), shortName: "Bot")
+    static let aurahome = PillarInfo(name: "AuraHome", color: Color(hex: "#00d4aa"), shortName: "AH")
+    static let astra = PillarInfo(name: "Astra", color: Color(hex: "#9B59B6"), shortName: "AD")
+    static let brand = PillarInfo(name: "Brand OS", color: Color(hex: "#C0C0C0"), shortName: "OS")
+    static let home = PillarInfo(name: "Home", color: Color(hex: "#4A9EFF"), shortName: "~")
 
     static func from(cwd: String?) -> PillarInfo {
         guard let cwd = cwd else { return .home }
@@ -125,15 +124,19 @@ struct PillarInfo {
         if lower.contains("aurahome") { return .aurahome }
         if lower.contains("astra digital") { return .astra }
         if lower.contains("claude_voice") { return .brand }
-        if lower.contains("inkpulse") { return PillarInfo(name: "InkPulse", color: Color(hex: "#00d4aa"), emoji: "", shortName: "IP") }
-        if lower.contains("tentacolo") { return PillarInfo(name: "Tentacolo", color: Color(hex: "#FFD700"), emoji: "", shortName: "3D") }
-        if lower.contains("guccione") { return PillarInfo(name: "Guccione", color: Color(hex: "#9B59B6"), emoji: "", shortName: "GC") }
-        if lower.contains("luxguard") { return PillarInfo(name: "LuxGuard", color: Color(hex: "#DAA520"), emoji: "", shortName: "LG") }
+        if lower.contains("inkpulse") { return PillarInfo(name: "InkPulse", color: Color(hex: "#00d4aa"), shortName: "IP") }
+        if lower.contains("tentacolo") { return PillarInfo(name: "Tentacolo", color: Color(hex: "#FFD700"), shortName: "3D") }
+        if lower.contains("guccione") { return PillarInfo(name: "Guccione", color: Color(hex: "#9B59B6"), shortName: "GC") }
+        if lower.contains("luxguard") { return PillarInfo(name: "LuxGuard", color: Color(hex: "#DAA520"), shortName: "LG") }
+        if lower.contains("gumroad") { return PillarInfo(name: "Gumroad", color: Color(hex: "#FF90E8"), shortName: "GR") }
         if lower.contains("polpo-cockpit") || lower.contains("polpo-control") { return .brand }
+        if lower.contains("digitalastra") || lower.contains("astraai") { return .astra }
+        if lower.contains("stripe-sdi") { return .astra }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         if cwd == home || URL(fileURLWithPath: cwd).lastPathComponent == NSUserName() { return .home }
         let last = URL(fileURLWithPath: cwd).lastPathComponent
-        return PillarInfo(name: last, color: Color(hex: "#4A9EFF"), emoji: "", shortName: String(last.prefix(2).uppercased()))
+        let capitalized = last.prefix(1).uppercased() + last.dropFirst()
+        return PillarInfo(name: capitalized, color: Color(hex: "#4A9EFF"), shortName: String(last.prefix(2).uppercased()))
     }
 
     /// Pillar name for persistence (HeartbeatRecord).
@@ -159,7 +162,7 @@ func projectName(from sessionId: String, filePath: String?, cwd: String?) -> Str
 
 // MARK: - Model Badge Helpers
 
-private func modelShortName(_ model: String) -> String {
+func modelShortName(_ model: String) -> String {
     let lower = model.lowercased()
     if lower.contains("opus") { return "opus" }
     if lower.contains("sonnet") { return "sonnet" }
@@ -168,7 +171,7 @@ private func modelShortName(_ model: String) -> String {
     return String(model.split(separator: "-").first ?? Substring(model)).prefix(8).lowercased()
 }
 
-private func modelColor(_ model: String) -> Color {
+func modelColor(_ model: String) -> Color {
     let lower = model.lowercased()
     if lower.contains("opus") { return Color(hex: "#00d4aa") }
     if lower.contains("sonnet") { return Color(hex: "#4A9EFF") }
@@ -176,7 +179,7 @@ private func modelColor(_ model: String) -> Color {
     return Color(hex: "#FFA500")
 }
 
-private func formatUptime(_ start: Date) -> String {
+func formatUptime(_ start: Date) -> String {
     let seconds = Int(Date().timeIntervalSince(start))
     if seconds < 60 { return "\(seconds)s" }
     let minutes = seconds / 60
@@ -203,31 +206,34 @@ struct SessionRowView: View {
         VStack(alignment: .leading, spacing: 0) {
             // ── Main row ──
             HStack(spacing: 8) {
-                // Mood indicator: EGI glyph or colored status dot
+                // Mood indicator: EGI glyph or status circle
                 if snapshot.egiState > .dormant {
-                    EGIGlyphView(state: snapshot.egiState, size: 16)
+                    EGIGlyphView(state: snapshot.egiState, size: 18)
                 } else {
-                    Text(mood.emoji)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(mood.color)
-                        .frame(width: 20)
+                    Circle()
+                        .fill(mood.color)
+                        .frame(width: 10, height: 10)
+                        .overlay(
+                            Circle()
+                                .stroke(mood.color.opacity(0.3), lineWidth: 3)
+                        )
+                        .frame(width: 22)
                 }
 
                 // Pillar name + model badge + status
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(pillar.name)
-                            .font(.system(.caption, design: .rounded))
-                            .fontWeight(.semibold)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
                             .foregroundStyle(pillar.color)
                             .lineLimit(1)
 
                         // Model badge
                         Text(modelShortName(snapshot.model))
-                            .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
                             .foregroundStyle(modelColor(snapshot.model))
                             .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
+                            .padding(.vertical, 2)
                             .background(
                                 Capsule()
                                     .fill(modelColor(snapshot.model).opacity(0.12))
@@ -236,16 +242,16 @@ struct SessionRowView: View {
 
                     HStack(spacing: 6) {
                         Text(mood.status)
-                            .font(.caption2)
+                            .font(.system(size: 11, design: .rounded))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
 
                         Text("·")
-                            .font(.caption2)
+                            .font(.system(size: 11))
                             .foregroundStyle(.quaternary)
 
                         Text(formatUptime(snapshot.startTime))
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
                             .foregroundStyle(.tertiary)
                     }
 
@@ -253,17 +259,17 @@ struct SessionRowView: View {
                     if let toolName = snapshot.lastToolName {
                         HStack(spacing: 0) {
                             Text(toolName)
-                                .font(.system(size: 9, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.3))
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.35))
                             if let target = snapshot.lastToolTarget {
                                 Text(": \(target)")
-                                    .font(.system(size: 9, design: .monospaced))
-                                    .foregroundStyle(.white.opacity(0.3))
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundStyle(.white.opacity(0.35))
                             }
                             if let task = snapshot.activeTaskName {
                                 Text(" · Task: \(task)")
-                                    .font(.system(size: 9, design: .monospaced))
-                                    .foregroundStyle(.white.opacity(0.3))
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundStyle(.white.opacity(0.35))
                             }
                         }
                         .lineLimit(1)
@@ -275,10 +281,10 @@ struct SessionRowView: View {
                 // tok/min compact
                 if snapshot.tokenMin > 0 {
                     Text(String(format: "%.0f", snapshot.tokenMin))
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundStyle(.secondary)
                     Text("t/m")
-                        .font(.system(size: 7, design: .monospaced))
+                        .font(.system(size: 8, design: .monospaced))
                         .foregroundStyle(.quaternary)
                 }
 
@@ -286,7 +292,7 @@ struct SessionRowView: View {
                 if snapshot.lastContextTokens > 0 {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(String(format: "%.0f%%", min(snapshot.contextPercent * 100, 999)))
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
                             .foregroundStyle(contextColor(for: snapshot.contextPercent))
 
                         GeometryReader { geo in
@@ -399,12 +405,12 @@ struct SessionRowView: View {
                             }
                         }) {
                             HStack(spacing: 4) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 10))
-                                Text("Kill Session")
-                                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                                Image(systemName: "xmark.circle")
+                                    .font(.system(size: 9))
+                                Text("Kill")
+                                    .font(.system(size: 9, weight: .medium, design: .monospaced))
                             }
-                            .foregroundStyle(Color(hex: "#FF4444"))
+                            .foregroundStyle(.white.opacity(0.3))
                         }
                         .buttonStyle(.borderless)
                         .disabled(cwd == nil)
@@ -438,14 +444,14 @@ struct SessionRowView: View {
     }
 
     private func detailStat(_ label: String, _ value: String, color: Color) -> some View {
-        VStack(spacing: 1) {
+        VStack(spacing: 2) {
             Text(value)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundStyle(color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(label)
-                .font(.system(size: 7, weight: .medium, design: .monospaced))
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity)

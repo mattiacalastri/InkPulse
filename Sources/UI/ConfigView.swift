@@ -106,7 +106,7 @@ struct ConfigView: View {
                         Text("🐙")
                             .font(.title)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("InkPulse v0.1.0")
+                            Text("InkPulse v1.2.0")
                                 .font(.system(.caption, design: .rounded))
                                 .fontWeight(.bold)
                             Text("Heartbeat Monitor for Claude Code")
@@ -142,7 +142,7 @@ struct ConfigView: View {
                 .padding(.horizontal, 12).padding(.vertical, 10)
             }
         }
-        .frame(width: 340)
+        .frame(width: 560)
     }
 
     // MARK: - Components

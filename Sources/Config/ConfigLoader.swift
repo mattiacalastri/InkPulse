@@ -104,11 +104,12 @@ enum ConfigLoader {
     }
 
     /// Resolves the context limit for a given model string.
+    /// Sorts keys by length descending so longer (more specific) matches win.
     static func contextLimit(for model: String, config: InkPulseConfig) -> Int {
-        // Check if the model string contains any key from the limits map
-        for (key, limit) in config.contextLimits {
+        let sortedKeys = config.contextLimits.keys.sorted { $0.count > $1.count }
+        for key in sortedKeys {
             if model.contains(key) {
-                return limit
+                return config.contextLimits[key] ?? InkPulseDefaults.fallbackContextLimit
             }
         }
         return InkPulseDefaults.fallbackContextLimit

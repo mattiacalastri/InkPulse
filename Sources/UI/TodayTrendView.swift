@@ -286,7 +286,7 @@ struct TodayTrendView: View {
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.03))
+                .fill(.white.opacity(0.04))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(Color(hex: "#00d4aa").opacity(0.1), lineWidth: 1)
@@ -335,7 +335,7 @@ struct TodayTrendView: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color.white.opacity(0.02))
+                .fill(.white.opacity(0.04))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
                         .stroke(Color.white.opacity(0.05), lineWidth: 1)
@@ -386,7 +386,7 @@ struct TodayTrendView: View {
                 .padding(12)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.white.opacity(0.02))
+                        .fill(.white.opacity(0.04))
                 )
             }
         }
@@ -444,7 +444,7 @@ struct TodayTrendView: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color.white.opacity(0.02))
+                .fill(.white.opacity(0.04))
         )
     }
 
@@ -542,7 +542,7 @@ struct TodayTrendView: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color.white.opacity(0.02))
+                .fill(.white.opacity(0.04))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
                         .stroke(Color.white.opacity(0.05), lineWidth: 1)

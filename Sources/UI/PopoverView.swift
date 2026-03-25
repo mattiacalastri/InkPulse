@@ -3,6 +3,8 @@ import SwiftUI
 struct PopoverView: View {
     @ObservedObject var appState: AppState
 
+    @State private var expandedSessionId: String?
+
     // MARK: - Computed Stats
 
     private var snaps: [MetricsSnapshot] {
@@ -11,12 +13,6 @@ struct PopoverView: View {
     }
 
     private var health: Int { appState.metricsEngine.aggregateHealth }
-
-    private var totalTokens: Int {
-        let hist = appState.tokenHistory
-        guard !hist.isEmpty else { return 0 }
-        return Int(hist.reduce(0, +) / 60.0 * Double(hist.count)) // rough total
-    }
 
     private var totalCost: Double {
         snaps.map(\.costEUR).reduce(0, +)
@@ -71,14 +67,22 @@ struct PopoverView: View {
 
             // ── HEADER ──
             HStack(alignment: .center) {
-                Text("🐙")
-                    .font(.title)
-                VStack(alignment: .leading, spacing: 0) {
+                // App icon from bundle
+                if let icon = NSImage(named: "AppIcon") {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .frame(width: 32, height: 32)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                } else {
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.title2)
+                        .foregroundStyle(Color(hex: "#00d4aa"))
+                }
+                VStack(alignment: .leading, spacing: 1) {
                     Text("InkPulse")
-                        .font(.system(.headline, design: .rounded))
-                        .fontWeight(.bold)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
                     Text("\(snaps.count) agents · \(Int(uptimeMin))m uptime")
-                        .font(.system(.caption2, design: .monospaced))
+                        .font(.system(size: 10, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -92,10 +96,10 @@ struct PopoverView: View {
                 if health >= 0 {
                     VStack(alignment: .trailing, spacing: 0) {
                         Text("\(health)")
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
                             .foregroundStyle(healthColor(for: health))
                         Text("HEALTH")
-                            .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
                 } else {
@@ -126,11 +130,11 @@ struct PopoverView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
                         Text("ECG")
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.secondary)
                         Spacer()
                         Text("tok/min · \(appState.tokenHistory.count)s window")
-                            .font(.system(size: 8, design: .monospaced))
+                            .font(.system(size: 9, design: .monospaced))
                             .foregroundStyle(.tertiary)
                     }
                     SparklineView(
@@ -153,18 +157,42 @@ struct PopoverView: View {
                     .padding(.vertical, 12)
             } else {
                 ScrollView {
-                    VStack(spacing: 2) {
-                        ForEach(snaps, id: \.sessionId) { snap in
-                            SessionRowView(
+                    VStack(spacing: 8) {
+                        LazyVGrid(
+                            columns: [
+                                GridItem(.flexible(), spacing: 8),
+                                GridItem(.flexible(), spacing: 8)
+                            ],
+                            spacing: 8
+                        ) {
+                            ForEach(snaps, id: \.sessionId) { snap in
+                                AgentCardView(
+                                    snapshot: snap,
+                                    filePath: appState.sessionFilePaths[snap.sessionId],
+                                    cwd: appState.sessionCwds[snap.sessionId],
+                                    isExpanded: expandedSessionId == snap.sessionId,
+                                    onTap: {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                            expandedSessionId = expandedSessionId == snap.sessionId ? nil : snap.sessionId
+                                        }
+                                    }
+                                )
+                            }
+                        }
+
+                        // Expanded detail panel (full-width, below grid)
+                        if let expandedId = expandedSessionId,
+                           let snap = snaps.first(where: { $0.sessionId == expandedId }) {
+                            AgentDetailPanel(
                                 snapshot: snap,
-                                filePath: appState.sessionFilePaths[snap.sessionId],
                                 cwd: appState.sessionCwds[snap.sessionId]
                             )
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
                     .padding(.horizontal, 12).padding(.vertical, 6)
                 }
-                .frame(maxHeight: 700)
+                .frame(maxHeight: 500)
             }
 
             Divider().padding(.horizontal, 8)
@@ -218,18 +246,18 @@ struct PopoverView: View {
             .buttonStyle(.borderless)
             .padding(.bottom, 6)
         }
-        .frame(width: 340)
+        .frame(width: 560)
     }
 
     // MARK: - Components
 
     private func statCell(_ label: String, _ value: String, color: Color) -> some View {
-        VStack(spacing: 1) {
+        VStack(spacing: 2) {
             Text(value)
-                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .font(.system(size: 15, weight: .bold, design: .monospaced))
                 .foregroundStyle(color)
             Text(label)
-                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity)
@@ -242,11 +270,11 @@ struct PopoverView: View {
     }
 
     private func statMini(_ label: String, _ value: String) -> some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 3) {
             Text(value)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
             Text(label)
-                .font(.system(size: 8, design: .monospaced))
+                .font(.system(size: 9, design: .monospaced))
                 .foregroundStyle(.tertiary)
         }
         .padding(.trailing, 8)

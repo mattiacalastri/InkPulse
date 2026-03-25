@@ -13,7 +13,7 @@ struct TrendsTab: View {
 
     var body: some View {
         ZStack {
-            Color(hex: "#0a0f1a").ignoresSafeArea()
+            Color.clear.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 Picker("", selection: $selectedPeriod) {
@@ -26,7 +26,7 @@ struct TrendsTab: View {
                 .padding(.top, 20)
                 .padding(.bottom, 16)
 
-                Divider().overlay(Color(hex: "#00d4aa").opacity(0.2))
+                Divider().overlay(.white.opacity(0.06))
 
                 ScrollView {
                     switch selectedPeriod {
@@ -41,5 +41,6 @@ struct TrendsTab: View {
             }
         }
         .frame(minWidth: 580, minHeight: 520)
+        .background(.ultraThinMaterial)
     }
 }

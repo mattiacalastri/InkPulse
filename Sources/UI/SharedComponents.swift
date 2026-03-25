@@ -6,18 +6,18 @@ import SwiftUI
 func trendStat(_ label: String, _ value: String, color: Color) -> some View {
     VStack(spacing: 4) {
         Text(value)
-            .font(.system(size: 18, weight: .bold, design: .monospaced))
+            .font(.system(size: 20, weight: .bold, design: .monospaced))
             .foregroundStyle(color)
         Text(label)
-            .font(.system(size: 9, weight: .medium, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.3))
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .foregroundStyle(.white.opacity(0.4))
     }
     .frame(maxWidth: .infinity)
 }
 
 func trendDivider() -> some View {
     Rectangle()
-        .fill(Color.white.opacity(0.06))
+        .fill(Color.white.opacity(0.08))
         .frame(width: 1, height: 36)
 }
 
@@ -25,22 +25,22 @@ func sectionLabel(_ text: String) -> some View {
     HStack(spacing: 6) {
         Rectangle()
             .fill(Color(hex: "#00d4aa"))
-            .frame(width: 3, height: 12)
+            .frame(width: 3, height: 14)
             .cornerRadius(1.5)
         Text(text)
-            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            .font(.system(size: 12, weight: .semibold, design: .monospaced))
             .foregroundStyle(.white.opacity(0.5))
     }
 }
 
 func emptyChart(_ message: String) -> some View {
     RoundedRectangle(cornerRadius: 10)
-        .fill(Color.white.opacity(0.02))
+        .fill(.white.opacity(0.04))
         .frame(height: 80)
         .overlay(
             Text(message)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.2))
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.25))
         )
 }
 
