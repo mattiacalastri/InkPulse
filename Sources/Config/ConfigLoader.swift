@@ -1,5 +1,11 @@
 import Foundation
 
+struct PillarOverride: Codable {
+    let name: String
+    let color: String
+    let short: String
+}
+
 /// User-overridable configuration loaded from ~/.inkpulse/config.json.
 struct InkPulseConfig: Codable {
     var refreshIntervalMs: Int
@@ -13,6 +19,7 @@ struct InkPulseConfig: Codable {
     var dailyBudgetEUR: Double
     var budgetAlertThresholds: [Double]
     var soundOnAnomaly: Bool
+    var pillarOverrides: [String: PillarOverride]
 
     enum CodingKeys: String, CodingKey {
         case refreshIntervalMs = "refresh_interval_ms"
@@ -26,6 +33,7 @@ struct InkPulseConfig: Codable {
         case dailyBudgetEUR = "daily_budget_eur"
         case budgetAlertThresholds = "budget_alert_thresholds"
         case soundOnAnomaly = "sound_on_anomaly"
+        case pillarOverrides = "pillar_overrides"
     }
 
     /// Defaults matching `InkPulseDefaults`.
@@ -40,7 +48,8 @@ struct InkPulseConfig: Codable {
         contextLimits: InkPulseDefaults.defaultContextLimits,
         dailyBudgetEUR: InkPulseDefaults.defaultDailyBudgetEUR,
         budgetAlertThresholds: InkPulseDefaults.defaultBudgetAlertThresholds,
-        soundOnAnomaly: true
+        soundOnAnomaly: true,
+        pillarOverrides: [:]
     )
 
     init(
@@ -54,7 +63,8 @@ struct InkPulseConfig: Codable {
         contextLimits: [String: Int],
         dailyBudgetEUR: Double,
         budgetAlertThresholds: [Double],
-        soundOnAnomaly: Bool
+        soundOnAnomaly: Bool,
+        pillarOverrides: [String: PillarOverride] = [:]
     ) {
         self.refreshIntervalMs = refreshIntervalMs
         self.heartbeatIntervalMs = heartbeatIntervalMs
@@ -67,6 +77,7 @@ struct InkPulseConfig: Codable {
         self.dailyBudgetEUR = dailyBudgetEUR
         self.budgetAlertThresholds = budgetAlertThresholds
         self.soundOnAnomaly = soundOnAnomaly
+        self.pillarOverrides = pillarOverrides
     }
 
     init(from decoder: Decoder) throws {
@@ -82,6 +93,7 @@ struct InkPulseConfig: Codable {
         dailyBudgetEUR = try container.decodeIfPresent(Double.self, forKey: .dailyBudgetEUR) ?? InkPulseDefaults.defaultDailyBudgetEUR
         budgetAlertThresholds = try container.decodeIfPresent([Double].self, forKey: .budgetAlertThresholds) ?? InkPulseDefaults.defaultBudgetAlertThresholds
         soundOnAnomaly = try container.decodeIfPresent(Bool.self, forKey: .soundOnAnomaly) ?? true
+        pillarOverrides = try container.decodeIfPresent([String: PillarOverride].self, forKey: .pillarOverrides) ?? [:]
     }
 }
 

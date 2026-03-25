@@ -113,12 +113,41 @@ struct PillarInfo {
 
     static let home = PillarInfo(name: "Home", color: Color(hex: "#4A9EFF"), shortName: "~")
 
+    private static let knownPillars: [(pathContains: String, info: PillarInfo)] = [
+        ("btc_predictions",     PillarInfo(name: "BTC Bot",    color: Color(hex: "#00d4aa"), shortName: "BT")),
+        ("projects/aurahome",   PillarInfo(name: "AuraHome",   color: Color(hex: "#FFD700"), shortName: "AH")),
+        ("Astra Digital",       PillarInfo(name: "Astra",      color: Color(hex: "#4A9EFF"), shortName: "AD")),
+        ("claude_voice",        PillarInfo(name: "Astra OS",   color: Color(hex: "#A855F7"), shortName: "OS")),
+        ("projects/InkPulse",   PillarInfo(name: "InkPulse",   color: Color(hex: "#00d4aa"), shortName: "IP")),
+    ]
+
     /// Derives project identity from the working directory path.
-    /// Uses the last path component with intelligent capitalization.
+    /// Checks config overrides first, then known pillars, then falls back to last path component.
     static func from(cwd: String?) -> PillarInfo {
         guard let cwd = cwd else { return .home }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         if cwd == home || URL(fileURLWithPath: cwd).lastPathComponent == NSUserName() { return .home }
+
+        // Config overrides first
+        let config = ConfigLoader.load()
+        for (pathKey, override) in config.pillarOverrides {
+            if cwd.contains(pathKey) {
+                return PillarInfo(
+                    name: override.name,
+                    color: Color(hex: override.color),
+                    shortName: override.short
+                )
+            }
+        }
+
+        // Known pillars
+        for pillar in knownPillars {
+            if cwd.contains(pillar.pathContains) {
+                return pillar.info
+            }
+        }
+
+        // Fallback: last path component capitalized
         let last = URL(fileURLWithPath: cwd).lastPathComponent
         let capitalized = last.prefix(1).uppercased() + last.dropFirst()
         return PillarInfo(name: capitalized, color: Color(hex: "#4A9EFF"), shortName: String(last.prefix(2).uppercased()))
