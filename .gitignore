@@ -2,3 +2,12 @@
 .swiftpm/
 *.xcodeproj/xcuserdata/
 .DS_Store
+.env
+*.env
+.ruff_cache/
+*.pem
+*.key
+*.p12
+DerivedData/
+Packages/
+xcuserdata/

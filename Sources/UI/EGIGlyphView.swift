@@ -82,7 +82,7 @@ struct EGIGlyphView: View {
         }
         .frame(width: size * 1.8, height: size * 1.8)
         .onAppear { startAnimation() }
-        .onChange(of: state) { _ in startAnimation() }
+        .onChange(of: state) { _, _ in startAnimation() }
     }
 
     private func startAnimation() {

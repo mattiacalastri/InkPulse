@@ -128,8 +128,7 @@ final class SessionMetrics {
                 costEUR += c
             }
 
-        case .progress(let toolUseID, let toolName, let isToolUse, let isError, let timestamp, _):
-            _ = toolUseID  // suppress unused warning
+        case .progress(_, let toolName, let isToolUse, let isError, let timestamp, _):
             if isToolUse {
                 toolEvents.append((date: timestamp, isError: isError))
                 if let name = toolName {

@@ -130,7 +130,7 @@ final class MetricsTests: XCTestCase {
         // 1M input + 100K output on opus
         // Input: 1_000_000 / 1_000_000 * 15.0 = $15.0
         // Output: 100_000 / 1_000_000 * 75.0 = $7.5
-        // Total USD: $22.5 → EUR: 22.5 * 0.92 = 20.7
+        // Total USD: $22.5 → EUR: 22.5 * 0.91 = 20.475
         session.ingest(makeAssistantEvent(
             model: "claude-opus-4",
             inputTokens: 1_000_000,
@@ -140,7 +140,7 @@ final class MetricsTests: XCTestCase {
 
         let snap = session.snapshot(at: baseDate.addingTimeInterval(10))
 
-        XCTAssertEqual(snap.costEUR, 20.7, accuracy: 0.1,
-                       "Expected ~EUR 20.7, got \(snap.costEUR)")
+        XCTAssertEqual(snap.costEUR, 20.475, accuracy: 0.1,
+                       "Expected ~EUR 20.475, got \(snap.costEUR)")
     }
 }

@@ -3,7 +3,20 @@ import Foundation
 enum JSONLParser {
 
     /// Maps toolUseID → toolName, populated from assistant events, consumed by progress events.
-    private static var toolNameRegistry: [String: String] = [:]
+    private static let registryLock = NSLock()
+    private static var _toolNameRegistry: [String: String] = [:]
+
+    private static func registrySet(_ key: String, _ value: String) {
+        registryLock.lock()
+        defer { registryLock.unlock() }
+        _toolNameRegistry[key] = value
+    }
+
+    private static func registryGet(_ key: String) -> String? {
+        registryLock.lock()
+        defer { registryLock.unlock() }
+        return _toolNameRegistry[key]
+    }
 
     // MARK: - Public
 
@@ -103,7 +116,7 @@ enum JSONLParser {
                           let toolName = block["name"] as? String {
                     let target = extractToolTarget(from: block["input"] as? [String: Any], toolName: toolName)
                     toolUses.append(ToolUseInfo(id: toolId, name: toolName, target: target))
-                    toolNameRegistry[toolId] = toolName
+                    registrySet(toolId, toolName)
                 }
             }
         }
@@ -207,7 +220,7 @@ enum JSONLParser {
         // Resolve tool name from registry
         let toolName: String?
         if let id = toolUseID {
-            toolName = toolNameRegistry[id]
+            toolName = registryGet(id)
         } else {
             toolName = nil
         }

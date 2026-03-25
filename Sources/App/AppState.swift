@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 
+@MainActor
 final class AppState: ObservableObject {
 
     @Published var metricsEngine = MetricsEngine()
@@ -39,10 +40,12 @@ final class AppState: ObservableObject {
         let projectsDir = InkPulseDefaults.claudeProjectsPath
 
         sessionWatcher = SessionWatcher(projectsDir: projectsDir) { [weak self] events in
-            guard let self = self, !self.isPaused else { return }
-            AppState.log("Received \(events.count) events")
-            for event in events {
-                self.metricsEngine.ingest(event)
+            Task { @MainActor in
+                guard let self = self, !self.isPaused else { return }
+                AppState.log("Received \(events.count) events")
+                for event in events {
+                    self.metricsEngine.ingest(event)
+                }
             }
         }
 
@@ -193,7 +196,7 @@ final class AppState: ObservableObject {
 
     // MARK: - Debug Log
 
-    static func log(_ msg: String) {
+    nonisolated static func log(_ msg: String) {
         let line = "[InkPulse \(ISO8601DateFormatter().string(from: Date()))] \(msg)\n"
         let logFile = InkPulseDefaults.inkpulseDir.appendingPathComponent("debug.log")
         if let data = line.data(using: .utf8) {

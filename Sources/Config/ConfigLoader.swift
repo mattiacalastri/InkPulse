@@ -86,17 +86,32 @@ struct InkPulseConfig: Codable {
 }
 
 /// Reads ~/.inkpulse/config.json and falls back to defaults on any error.
+/// Caches the result and only re-reads from disk when the file's modification date changes.
 enum ConfigLoader {
+
+    private static var cachedConfig: InkPulseConfig?
+    private static var cachedModDate: Date?
 
     static func load() -> InkPulseConfig {
         let url = InkPulseDefaults.configFile
-        guard FileManager.default.fileExists(atPath: url.path) else {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else {
             return .default
         }
+
+        // Check file modification date — return cache if unchanged
+        let modDate: Date? = (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+        if let modDate, let cachedMod = cachedModDate, let cached = cachedConfig, modDate == cachedMod {
+            return cached
+        }
+
         do {
             let data = try Data(contentsOf: url)
             let decoder = JSONDecoder()
-            return try decoder.decode(InkPulseConfig.self, from: data)
+            let config = try decoder.decode(InkPulseConfig.self, from: data)
+            cachedConfig = config
+            cachedModDate = modDate
+            return config
         } catch {
             print("[InkPulse] Failed to load config: \(error.localizedDescription). Using defaults.")
             return .default
