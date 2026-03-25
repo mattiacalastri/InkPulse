@@ -246,7 +246,7 @@ struct PopoverView: View {
             .buttonStyle(.borderless)
             .padding(.bottom, 6)
         }
-        .frame(width: 560)
+        .frame(width: 560, minHeight: 620)
     }
 
     // MARK: - Components
