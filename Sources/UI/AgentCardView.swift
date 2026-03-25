@@ -1,42 +1,49 @@
 import SwiftUI
 import AppKit
 
-// MARK: - Pulse Modifier (living mood indicator)
+// MARK: - Breathing Indicator
 
-struct PulseEffect: ViewModifier {
-    let isActive: Bool
+/// A living circle that breathes when the agent is active.
+struct BreathingDot: View {
     let color: Color
-    @State private var isPulsing = false
+    let isActive: Bool
+    @State private var phase = false
 
-    func body(content: Content) -> some View {
-        content
-            .overlay(
+    var body: some View {
+        ZStack {
+            // Outer breath ring (only when active)
+            if isActive {
                 Circle()
-                    .stroke(color.opacity(isPulsing && isActive ? 0.6 : 0), lineWidth: 3)
-                    .scaleEffect(isPulsing && isActive ? 1.8 : 1.0)
-            )
-            .onAppear {
-                guard isActive else { return }
-                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                    isPulsing = true
-                }
+                    .stroke(color.opacity(phase ? 0.4 : 0.0), lineWidth: 2)
+                    .frame(width: 16, height: 16)
+                    .scaleEffect(phase ? 1.3 : 0.8)
             }
-            .onChange(of: isActive) { active in
-                if active {
-                    withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                        isPulsing = true
-                    }
-                } else {
-                    isPulsing = false
-                }
-            }
+
+            // Core dot
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+                .scaleEffect(isActive && phase ? 1.15 : 1.0)
+        }
+        .frame(width: 18, height: 18)
+        .onAppear { startBreathing() }
+        .onChange(of: isActive) { _, _ in startBreathing() }
+    }
+
+    private func startBreathing() {
+        guard isActive else {
+            phase = false
+            return
+        }
+        withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
+            phase = true
+        }
     }
 }
 
 // MARK: - Agent Card View
 
-/// Compact agent card designed for a 2-column grid.
-/// Expansion is managed externally by PopoverView to avoid grid layout issues.
+/// Each card is an agent — a teammate, not a metric.
 struct AgentCardView: View {
     let snapshot: MetricsSnapshot
     let filePath: String?
@@ -53,50 +60,53 @@ struct AgentCardView: View {
         PillarInfo.from(cwd: cwd)
     }
 
-    /// Agent is actively working (not sleeping/stalled/idle)
     private var isAgentActive: Bool {
         let idle = Date().timeIntervalSince(snapshot.lastEventTime)
         return idle < 30 && snapshot.tokenMin > 50
     }
 
+    /// Human-readable status that tells a story
+    private var statusVerb: String {
+        let idle = Date().timeIntervalSince(snapshot.lastEventTime)
+        if idle > 120 { return "Sleeping" }
+        if idle > 30 { return "Waiting for input" }
+        if snapshot.subagentCount > 3 { return "Orchestrating \(snapshot.subagentCount) agents" }
+        if snapshot.tokenMin > 800 { return "Forging" }
+        if snapshot.cacheHit > 0.95 { return "Flowing" }
+        if snapshot.errorRate > 0.10 { return "Struggling" }
+        if snapshot.tokenMin > 200 { return "Working" }
+        if snapshot.tokenMin > 50 { return "Thinking" }
+        return "Idle"
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            cardHeader
-            cardStatusLine
-            cardCurrentActivity
-            cardStats
-            cardBars
-            cardActions
+        VStack(alignment: .leading, spacing: 8) {
+            cardIdentity
+            cardActivity
+            cardVitals
+            cardActionBar
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.primary.opacity(isExpanded ? 0.08 : 0.04))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(isExpanded ? pillar.color.opacity(0.4) : pillar.color.opacity(0.15), lineWidth: 1)
-                )
-        )
+        .padding(12)
+        .background(cardBackground)
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
     }
 
-    // MARK: - Card Sections
+    // MARK: - Identity (who is this agent?)
 
-    private var cardHeader: some View {
-        HStack(spacing: 6) {
+    private var cardIdentity: some View {
+        HStack(spacing: 8) {
+            // Living indicator
             if snapshot.egiState > .dormant {
                 EGIGlyphView(state: snapshot.egiState, size: 14)
             } else {
-                Circle()
-                    .fill(mood.color)
-                    .frame(width: 8, height: 8)
-                    .modifier(PulseEffect(isActive: isAgentActive, color: mood.color))
+                BreathingDot(color: mood.color, isActive: isAgentActive)
             }
 
-            VStack(alignment: .leading, spacing: 1) {
+            // Name + context
+            VStack(alignment: .leading, spacing: 2) {
                 Text(pillar.name)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundStyle(pillar.color)
                     .lineLimit(1)
 
@@ -115,145 +125,161 @@ struct AgentCardView: View {
 
             Spacer()
 
-            Text(modelShortName(snapshot.model))
-                .font(.system(size: 8, weight: .semibold, design: .monospaced))
-                .foregroundStyle(modelColor(snapshot.model))
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(
-                    Capsule()
-                        .fill(modelColor(snapshot.model).opacity(0.12))
-                )
+            // Model + uptime
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(modelShortName(snapshot.model))
+                    .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(modelColor(snapshot.model))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule().fill(modelColor(snapshot.model).opacity(0.12))
+                    )
+                Text(formatUptime(snapshot.startTime))
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundStyle(.quaternary)
+            }
         }
     }
 
-    private var cardStatusLine: some View {
-        HStack(spacing: 4) {
-            Text(mood.status)
-                .font(.system(size: 10, design: .rounded))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Text("\u{00B7}")
-                .font(.system(size: 10))
-                .foregroundStyle(.quaternary)
-            Text(formatUptime(snapshot.startTime))
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                .foregroundStyle(.tertiary)
-            Spacer()
-        }
-    }
+    // MARK: - Activity (what is the agent doing RIGHT NOW?)
 
-    @ViewBuilder
-    private var cardCurrentActivity: some View {
-        if let toolName = snapshot.lastToolName {
-            HStack(spacing: 4) {
-                Image(systemName: isAgentActive ? "bolt.fill" : "clock")
-                    .font(.system(size: 7))
-                    .foregroundColor(isAgentActive ? Color(hex: "#00d4aa") : Color.gray)
-                Text(toolName)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundColor(isAgentActive ? .white : .gray)
-                if let target = snapshot.lastToolTarget {
-                    Text(target)
+    private var cardActivity: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Status verb — the story
+            Text(statusVerb)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundColor(isAgentActive ? Color(hex: "#00d4aa") : Color.gray)
+
+            // Current tool — what specifically
+            if let toolName = snapshot.lastToolName {
+                HStack(spacing: 4) {
+                    Image(systemName: isAgentActive ? "bolt.fill" : "clock")
+                        .font(.system(size: 7))
+                        .foregroundColor(isAgentActive ? Color(hex: "#00d4aa") : Color.gray.opacity(0.5))
+
+                    let display = toolDisplay(toolName, target: snapshot.lastToolTarget)
+                    Text(display)
                         .font(.system(size: 9, design: .monospaced))
-                        .foregroundColor(isAgentActive ? Color.white.opacity(0.6) : Color.gray.opacity(0.5))
+                        .foregroundColor(isAgentActive ? Color.white.opacity(0.7) : Color.gray.opacity(0.5))
+                        .lineLimit(1)
                 }
             }
-            .lineLimit(1)
+        }
+        .padding(.vertical, 2)
+        .padding(.horizontal, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isAgentActive ? Color(hex: "#00d4aa").opacity(0.06) : Color.clear)
+        )
+    }
+
+    // MARK: - Vitals (health at a glance, not a spreadsheet)
+
+    private var cardVitals: some View {
+        HStack(spacing: 10) {
+            // Speed
+            vital(String(format: "%.0f", snapshot.tokenMin), icon: "speedometer", color: .primary)
+
+            // Cost
+            vital(String(format: "€%.2f", snapshot.costEUR), icon: "eurosign.circle", color: .primary)
+
+            Spacer()
+
+            // Health score (the most important number)
+            Text("\(snapshot.health)")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(healthColor(for: snapshot.health))
+
+            // Context % (only if critical)
+            if snapshot.contextPercent > 0.6 {
+                Text(String(format: "%.0f%%", snapshot.contextPercent * 100))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(contextColor(for: snapshot.contextPercent))
+            }
         }
     }
 
-    private var cardStats: some View {
+    // MARK: - Action Bar (what can I DO with this agent?)
+
+    private var cardActionBar: some View {
         HStack(spacing: 0) {
-            cardStat(String(format: "%.0f", snapshot.tokenMin), "t/m")
-            Spacer()
-            cardStat(String(format: "%.0f%%", snapshot.cacheHit * 100), "cache")
-            Spacer()
-            cardStat(String(format: "\u{20AC}%.2f", snapshot.costEUR), "cost")
-        }
-    }
-
-    private var cardBars: some View {
-        HStack(spacing: 8) {
-            miniBar(value: max(0, min(snapshot.health, 100)), max: 100,
-                    label: "\(snapshot.health)", color: healthColor(for: snapshot.health))
-
-            if snapshot.lastContextTokens > 0 {
-                let pct = min(snapshot.contextPercent, 1.0)
-                miniBar(value: Int(pct * 100), max: 100,
-                        label: String(format: "%.0f%%", min(snapshot.contextPercent * 100, 999)),
-                        color: contextColor(for: snapshot.contextPercent))
-            }
-        }
-    }
-
-    private var cardActions: some View {
-        HStack(spacing: 8) {
+            // Open — the primary action
             Button(action: { openTerminal() }) {
-                HStack(spacing: 3) {
-                    Image(systemName: "terminal")
-                        .font(.system(size: 8))
+                HStack(spacing: 4) {
+                    Image(systemName: "terminal.fill")
+                        .font(.system(size: 9))
                     Text("Open")
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
                 }
-                .foregroundStyle(pillar.color.opacity(0.7))
+                .foregroundStyle(pillar.color)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule().fill(pillar.color.opacity(0.1))
+                )
             }
             .buttonStyle(.borderless)
             .disabled(cwd == nil)
 
             Spacer()
 
-            if snapshot.subagentCount > 0 {
-                HStack(spacing: 2) {
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 7))
-                    Text("\(snapshot.subagentCount)")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+            // Badges (subagents, errors)
+            HStack(spacing: 6) {
+                if snapshot.subagentCount > 0 {
+                    badge("\(snapshot.subagentCount)", icon: "person.2.fill", color: Color(hex: "#4A9EFF"))
                 }
-                .foregroundStyle(Color(hex: "#4A9EFF"))
-            }
-
-            if snapshot.errorRate > 0.01 {
-                HStack(spacing: 2) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 7))
-                    Text(String(format: "%.0f%%", snapshot.errorRate * 100))
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                if snapshot.errorRate > 0.01 {
+                    badge(String(format: "%.0f%%", snapshot.errorRate * 100), icon: "exclamationmark.triangle.fill", color: Color(hex: "#FF4444"))
                 }
-                .foregroundStyle(Color(hex: "#FF4444"))
             }
         }
     }
 
-    // MARK: - Components
+    // MARK: - Background
 
-    private func miniBar(value: Int, max: Int, label: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(color)
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.gray.opacity(0.2))
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(color)
-                        .frame(width: geo.size.width * CGFloat(value) / CGFloat(max))
-                }
-            }
-            .frame(height: 3)
-        }
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(Color.primary.opacity(isExpanded ? 0.08 : 0.04))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(
+                        isAgentActive ? pillar.color.opacity(0.3) :
+                        isExpanded ? pillar.color.opacity(0.4) :
+                        pillar.color.opacity(0.1),
+                        lineWidth: isAgentActive ? 1.5 : 1
+                    )
+            )
     }
 
-    private func cardStat(_ value: String, _ label: String) -> some View {
-        HStack(spacing: 2) {
+    // MARK: - Helpers
+
+    private func vital(_ value: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon)
+                .font(.system(size: 8))
+                .foregroundStyle(.tertiary)
             Text(value)
                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.primary)
-            Text(label)
-                .font(.system(size: 8, design: .monospaced))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(color)
         }
+    }
+
+    private func badge(_ text: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 2) {
+            Image(systemName: icon)
+                .font(.system(size: 7))
+            Text(text)
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+        }
+        .foregroundStyle(color)
+    }
+
+    /// Makes tool output human-friendly: "Read → config.swift" instead of "Read: config.swift"
+    private func toolDisplay(_ tool: String, target: String?) -> String {
+        guard let t = target else { return tool }
+        return "\(tool) \u{2192} \(t)"
     }
 
     private func openTerminal() {
@@ -266,7 +292,7 @@ struct AgentCardView: View {
     }
 }
 
-// MARK: - Agent Detail Panel (full-width, shown below grid when a card is selected)
+// MARK: - Agent Detail Panel
 
 struct AgentDetailPanel: View {
     let snapshot: MetricsSnapshot
@@ -275,148 +301,121 @@ struct AgentDetailPanel: View {
     @State private var showKillConfirmation = false
     @State private var resolvedPID: pid_t?
 
-    private var pillar: PillarInfo {
-        PillarInfo.from(cwd: cwd)
-    }
+    private var pillar: PillarInfo { PillarInfo.from(cwd: cwd) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Header
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(pillar.color)
-                    .frame(width: 6, height: 6)
-                Text(pillar.name)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(pillar.color)
-                Text(modelShortName(snapshot.model))
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(modelColor(snapshot.model))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(modelColor(snapshot.model).opacity(0.12)))
-                Spacer()
-
-                // Open Terminal
-                Button(action: { openTerminal() }) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "terminal")
-                            .font(.system(size: 8))
-                        Text("Open")
-                            .font(.system(size: 8, weight: .medium, design: .monospaced))
-                    }
-                    .foregroundStyle(pillar.color.opacity(0.7))
-                }
-                .buttonStyle(.borderless)
-                .disabled(cwd == nil)
-
-                // Kill
-                Button(action: {
-                    resolvedPID = ProcessResolver.findPID(for: cwd)
-                    if resolvedPID != nil {
-                        showKillConfirmation = true
-                    }
-                }) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "xmark.circle")
-                            .font(.system(size: 8))
-                        Text("Kill")
-                            .font(.system(size: 8, weight: .medium, design: .monospaced))
-                    }
-                    .foregroundStyle(Color(hex: "#FF4444").opacity(0.5))
-                }
-                .buttonStyle(.borderless)
-                .disabled(cwd == nil)
-            }
-
-            // Stats grid
-            HStack(spacing: 0) {
-                detailStat("tok/min", String(format: "%.0f", snapshot.tokenMin), color: .primary)
-                detailStat("cache", String(format: "%.0f%%", snapshot.cacheHit * 100), color: snapshot.cacheHit > 0.8 ? Color(hex: "#00d4aa") : Color(hex: "#FFA500"))
-                detailStat("err", String(format: "%.1f%%", snapshot.errorRate * 100), color: snapshot.errorRate < 0.05 ? Color(hex: "#00d4aa") : Color(hex: "#FF4444"))
-                detailStat("cost", String(format: "\u{20AC}%.2f", snapshot.costEUR), color: .primary)
-                if snapshot.subagentCount > 0 {
-                    detailStat("subs", "\(snapshot.subagentCount)", color: Color(hex: "#4A9EFF"))
-                }
-                if let ratio = snapshot.thinkOutputRatio {
-                    detailStat("think", String(format: "%.0f%%", ratio * 100), color: ratio > 0.5 ? Color(hex: "#FFA500") : Color(hex: "#00d4aa"))
-                }
-                detailStat("idle", String(format: "%.0fs", snapshot.idleAvgS), color: snapshot.idleAvgS > 15 ? Color(hex: "#FFA500") : .primary)
-                detailStat("tools", String(format: "%.1f/m", snapshot.toolFreq), color: .primary)
-            }
-
-            // EGI + Context + Anomaly row
-            HStack(spacing: 12) {
-                if snapshot.egiState > .dormant {
-                    EGIStateLabel(state: snapshot.egiState, confidence: snapshot.egiConfidence)
-                }
-
-                if snapshot.lastContextTokens > 0 {
-                    HStack(spacing: 4) {
-                        Text(formatTokenCount(snapshot.lastContextTokens))
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundStyle(contextColor(for: snapshot.contextPercent))
-                        Text("ctx")
-                            .font(.system(size: 8, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-
-                if let anomaly = snapshot.anomaly {
-                    HStack(spacing: 3) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 7))
-                            .foregroundStyle(Color(hex: "#FFA500"))
-                        Text(anomaly.uppercased())
-                            .font(.system(size: 8, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Color(hex: "#FFA500"))
-                    }
-                }
-
-                if snapshot.toolDiversity > 0 {
-                    HStack(spacing: 4) {
-                        Text("\(snapshot.toolDiversity)")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Color(hex: "#4A9EFF"))
-                        Text("tools")
-                            .font(.system(size: 8, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                        Text("\(snapshot.domainSpread)")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundStyle(snapshot.domainSpread >= 3 ? Color(hex: "#FFD700") : .primary)
-                        Text("domains")
-                            .font(.system(size: 8, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-
-                Spacer()
-            }
+            panelHeader
+            panelStats
+            panelContext
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 12)
                 .fill(Color.primary.opacity(0.04))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
+                    RoundedRectangle(cornerRadius: 12)
                         .stroke(pillar.color.opacity(0.2), lineWidth: 1)
                 )
         )
         .alert("Terminate Session?", isPresented: $showKillConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Terminate", role: .destructive) {
-                if let pid = resolvedPID {
-                    SessionKiller.kill(pid: pid)
-                }
+                if let pid = resolvedPID { SessionKiller.kill(pid: pid) }
             }
         } message: {
-            let pidStr = resolvedPID.map { "\($0)" } ?? "?"
-            Text("Terminate \(pillar.name)? (PID \(pidStr))")
+            Text("Terminate \(pillar.name)?")
         }
     }
 
-    // MARK: - Components
+    private var panelHeader: some View {
+        HStack(spacing: 8) {
+            Circle().fill(pillar.color).frame(width: 6, height: 6)
+            Text(pillar.name)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(pillar.color)
+            Text(modelShortName(snapshot.model))
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundStyle(modelColor(snapshot.model))
+                .padding(.horizontal, 4).padding(.vertical, 1)
+                .background(Capsule().fill(modelColor(snapshot.model).opacity(0.12)))
+            Spacer()
+
+            Button(action: { openTerminal() }) {
+                Label("Open", systemImage: "terminal.fill")
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .foregroundStyle(pillar.color)
+            }
+            .buttonStyle(.borderless)
+
+            Button(action: {
+                resolvedPID = ProcessResolver.findPID(for: cwd)
+                if resolvedPID != nil { showKillConfirmation = true }
+            }) {
+                Label("Kill", systemImage: "xmark.circle")
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .foregroundColor(Color(hex: "#FF4444").opacity(0.5))
+            }
+            .buttonStyle(.borderless)
+            .disabled(cwd == nil)
+        }
+    }
+
+    private var panelStats: some View {
+        HStack(spacing: 0) {
+            detailStat("Speed", String(format: "%.0f t/m", snapshot.tokenMin), color: .primary)
+            detailStat("Cache", String(format: "%.0f%%", snapshot.cacheHit * 100), color: snapshot.cacheHit > 0.8 ? Color(hex: "#00d4aa") : Color(hex: "#FFA500"))
+            detailStat("Errors", String(format: "%.1f%%", snapshot.errorRate * 100), color: snapshot.errorRate < 0.05 ? Color(hex: "#00d4aa") : Color(hex: "#FF4444"))
+            detailStat("Cost", String(format: "€%.2f", snapshot.costEUR), color: .primary)
+            if snapshot.subagentCount > 0 {
+                detailStat("Agents", "\(snapshot.subagentCount)", color: Color(hex: "#4A9EFF"))
+            }
+            if let ratio = snapshot.thinkOutputRatio {
+                detailStat("Think", String(format: "%.0f%%", ratio * 100), color: ratio > 0.5 ? Color(hex: "#FFA500") : Color(hex: "#00d4aa"))
+            }
+            detailStat("Idle", String(format: "%.0fs", snapshot.idleAvgS), color: snapshot.idleAvgS > 15 ? Color(hex: "#FFA500") : .primary)
+        }
+    }
+
+    private var panelContext: some View {
+        HStack(spacing: 12) {
+            if snapshot.egiState > .dormant {
+                EGIStateLabel(state: snapshot.egiState, confidence: snapshot.egiConfidence)
+            }
+            if snapshot.lastContextTokens > 0 {
+                HStack(spacing: 3) {
+                    Text(formatTokenCount(snapshot.lastContextTokens))
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(contextColor(for: snapshot.contextPercent))
+                    Text("context")
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            if let anomaly = snapshot.anomaly {
+                HStack(spacing: 3) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 7))
+                        .foregroundStyle(Color(hex: "#FFA500"))
+                    Text(anomaly.uppercased())
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color(hex: "#FFA500"))
+                }
+            }
+            if snapshot.toolDiversity > 0 {
+                HStack(spacing: 3) {
+                    Text("\(snapshot.toolDiversity) tools")
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(Color(hex: "#4A9EFF"))
+                    Text("\(snapshot.domainSpread) domains")
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(snapshot.domainSpread >= 3 ? Color(hex: "#FFD700") : Color.gray)
+                }
+            }
+            Spacer()
+        }
+    }
 
     private func detailStat(_ label: String, _ value: String, color: Color) -> some View {
         VStack(spacing: 2) {
