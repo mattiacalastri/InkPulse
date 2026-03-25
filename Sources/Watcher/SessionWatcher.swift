@@ -9,6 +9,7 @@ final class SessionWatcher {
     private var tailers: [String: FileTailer] = [:]  // keyed by file path
     private var timer: Timer?
     private(set) var sessionCwds: [String: String] = [:]  // sessionId → cwd
+    private(set) var sessionBranches: [String: String] = [:]  // sessionId → gitBranch
 
     init(projectsDir: URL, onNewEvents: @escaping ([ClaudeEvent]) -> Void) {
         self.projectsDir = projectsDir
@@ -121,6 +122,15 @@ final class SessionWatcher {
                         let sid = String(line[sidRange.upperBound..<sidEnd.lowerBound])
                         if sessionCwds[sid] == nil {
                             sessionCwds[sid] = cwd
+                        }
+                        // Extract gitBranch
+                        if sessionBranches[sid] == nil,
+                           let brRange = line.range(of: "\"gitBranch\":\""),
+                           let brEnd = line[brRange.upperBound...].range(of: "\"") {
+                            let branch = String(line[brRange.upperBound..<brEnd.lowerBound])
+                            if !branch.isEmpty && branch != "HEAD" {
+                                sessionBranches[sid] = branch
+                            }
                         }
                     }
                 }

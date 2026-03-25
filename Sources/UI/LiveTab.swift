@@ -3,6 +3,8 @@ import SwiftUI
 struct LiveTab: View {
     @ObservedObject var appState: AppState
 
+    @State private var expandedSessionId: String?
+
     // MARK: - Computed Stats
 
     private var snaps: [MetricsSnapshot] {
@@ -349,27 +351,41 @@ struct LiveTab: View {
                     .padding(.vertical, 16)
             } else {
                 ScrollView {
-                    VStack(spacing: 4) {
-                        ForEach(snaps, id: \.sessionId) { snap in
-                            SessionRowView(
+                    VStack(spacing: 8) {
+                        LazyVGrid(
+                            columns: [
+                                GridItem(.flexible(), spacing: 10),
+                                GridItem(.flexible(), spacing: 10)
+                            ],
+                            spacing: 10
+                        ) {
+                            ForEach(snaps, id: \.sessionId) { snap in
+                                AgentCardView(
+                                    snapshot: snap,
+                                    filePath: appState.sessionFilePaths[snap.sessionId],
+                                    cwd: appState.sessionCwds[snap.sessionId],
+                                    gitBranch: appState.sessionBranches[snap.sessionId],
+                                    isExpanded: expandedSessionId == snap.sessionId,
+                                    onTap: {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                            expandedSessionId = expandedSessionId == snap.sessionId ? nil : snap.sessionId
+                                        }
+                                    }
+                                )
+                            }
+                        }
+
+                        if let expandedId = expandedSessionId,
+                           let snap = snaps.first(where: { $0.sessionId == expandedId }) {
+                            AgentDetailPanel(
                                 snapshot: snap,
-                                filePath: appState.sessionFilePaths[snap.sessionId],
                                 cwd: appState.sessionCwds[snap.sessionId]
                             )
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(.white.opacity(0.05))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .stroke(.white.opacity(0.06), lineWidth: 1)
-                                    )
-                            )
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
                 }
-                .frame(maxHeight: 400)
+                .frame(maxHeight: 500)
             }
         }
     }

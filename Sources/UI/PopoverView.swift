@@ -170,6 +170,7 @@ struct PopoverView: View {
                                     snapshot: snap,
                                     filePath: appState.sessionFilePaths[snap.sessionId],
                                     cwd: appState.sessionCwds[snap.sessionId],
+                                    gitBranch: appState.sessionBranches[snap.sessionId],
                                     isExpanded: expandedSessionId == snap.sessionId,
                                     onTap: {
                                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {

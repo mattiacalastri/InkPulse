@@ -6,6 +6,7 @@ struct AgentCardView: View {
     let snapshot: MetricsSnapshot
     let filePath: String?
     let cwd: String?
+    let gitBranch: String?
     let isExpanded: Bool
     let onTap: () -> Void
 
@@ -33,10 +34,25 @@ struct AgentCardView: View {
                         )
                 }
 
-                Text(pillar.name)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(pillar.color)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(pillar.name)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(pillar.color)
+                        .lineLimit(1)
+
+                    // Differentiator: git branch or session ID prefix
+                    if let branch = gitBranch {
+                        Text(branch)
+                            .font(.system(size: 8, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    } else if pillar.name == "Home" {
+                        Text(String(snapshot.sessionId.prefix(8)))
+                            .font(.system(size: 8, design: .monospaced))
+                            .foregroundStyle(.quaternary)
+                            .lineLimit(1)
+                    }
+                }
 
                 Spacer()
 

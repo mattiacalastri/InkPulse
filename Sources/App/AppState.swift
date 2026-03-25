@@ -9,6 +9,7 @@ final class AppState: ObservableObject {
     @Published var historyStore = HistoryStore()
         @Published var sessionFilePaths: [String: String] = [:] // sessionId → filePath
     @Published var sessionCwds: [String: String] = [:] // sessionId → cwd
+    @Published var sessionBranches: [String: String] = [:] // sessionId → gitBranch
 
     private var heartbeatLogger: HeartbeatLogger?
     private var sessionWatcher: SessionWatcher?
@@ -118,6 +119,11 @@ final class AppState: ObservableObject {
         if let cwds = sessionWatcher?.sessionCwds {
             for (sid, cwd) in cwds {
                 sessionCwds[sid] = cwd
+            }
+        }
+        if let branches = sessionWatcher?.sessionBranches {
+            for (sid, branch) in branches {
+                sessionBranches[sid] = branch
             }
         }
     }
