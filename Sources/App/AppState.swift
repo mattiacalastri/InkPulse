@@ -186,6 +186,13 @@ final class AppState: ObservableObject {
         showingConfig.toggle()
     }
 
+    func forceRescan() {
+        sessionWatcher?.poll()
+        refresh()
+        heartbeat()
+        AppState.log("Force rescan triggered")
+    }
+
     func generateReport() {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"

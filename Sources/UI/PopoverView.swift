@@ -52,6 +52,14 @@ struct PopoverView: View {
                 }
                 Spacer()
 
+                Button(action: { appState.forceRescan() }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#00d4aa"))
+                }
+                .buttonStyle(.borderless)
+                .help("Sync refresh")
+
                 // EGI glyph (global)
                 if appState.metricsEngine.globalEGIState > .dormant {
                     EGIGlyphView(state: appState.metricsEngine.globalEGIState, size: 20)
