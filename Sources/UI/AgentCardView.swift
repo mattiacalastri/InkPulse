@@ -1,6 +1,41 @@
 import SwiftUI
+import AppKit
 
-/// Compact agent card designed for a 2-column grid in the menubar popover.
+// MARK: - Pulse Modifier (living mood indicator)
+
+struct PulseEffect: ViewModifier {
+    let isActive: Bool
+    let color: Color
+    @State private var isPulsing = false
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                Circle()
+                    .stroke(color.opacity(isPulsing && isActive ? 0.6 : 0), lineWidth: 3)
+                    .scaleEffect(isPulsing && isActive ? 1.8 : 1.0)
+            )
+            .onAppear {
+                guard isActive else { return }
+                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                    isPulsing = true
+                }
+            }
+            .onChange(of: isActive) { active in
+                if active {
+                    withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                        isPulsing = true
+                    }
+                } else {
+                    isPulsing = false
+                }
+            }
+    }
+}
+
+// MARK: - Agent Card View
+
+/// Compact agent card designed for a 2-column grid.
 /// Expansion is managed externally by PopoverView to avoid grid layout issues.
 struct AgentCardView: View {
     let snapshot: MetricsSnapshot
@@ -18,133 +53,20 @@ struct AgentCardView: View {
         PillarInfo.from(cwd: cwd)
     }
 
+    /// Agent is actively working (not sleeping/stalled/idle)
+    private var isAgentActive: Bool {
+        let idle = Date().timeIntervalSince(snapshot.lastEventTime)
+        return idle < 30 && snapshot.tokenMin > 50
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // ── Top: Mood + Pillar + Model ──
-            HStack(spacing: 6) {
-                if snapshot.egiState > .dormant {
-                    EGIGlyphView(state: snapshot.egiState, size: 14)
-                } else {
-                    Circle()
-                        .fill(mood.color)
-                        .frame(width: 8, height: 8)
-                        .overlay(
-                            Circle()
-                                .stroke(mood.color.opacity(0.3), lineWidth: 2)
-                        )
-                }
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(pillar.name)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(pillar.color)
-                        .lineLimit(1)
-
-                    // Differentiator: git branch or session ID prefix
-                    if let branch = gitBranch {
-                        Text(branch)
-                            .font(.system(size: 8, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                    } else if pillar.name == "Home" {
-                        Text(String(snapshot.sessionId.prefix(8)))
-                            .font(.system(size: 8, design: .monospaced))
-                            .foregroundStyle(.quaternary)
-                            .lineLimit(1)
-                    }
-                }
-
-                Spacer()
-
-                Text(modelShortName(snapshot.model))
-                    .font(.system(size: 8, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(modelColor(snapshot.model))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(
-                        Capsule()
-                            .fill(modelColor(snapshot.model).opacity(0.12))
-                    )
-            }
-
-            // ── Status line ──
-            HStack(spacing: 4) {
-                Text(mood.status)
-                    .font(.system(size: 10, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                Text("\u{00B7}")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.quaternary)
-
-                Text(formatUptime(snapshot.startTime))
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-
-                Spacer()
-            }
-
-            // ── Last tool ──
-            if let toolName = snapshot.lastToolName {
-                HStack(spacing: 0) {
-                    Text(toolName)
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(.secondary.opacity(0.6))
-                    if let target = snapshot.lastToolTarget {
-                        Text(": \(target)")
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(.secondary.opacity(0.6))
-                    }
-                }
-                .lineLimit(1)
-            }
-
-            // ── Stats row ──
-            HStack(spacing: 0) {
-                cardStat(String(format: "%.0f", snapshot.tokenMin), "t/m")
-                Spacer()
-                cardStat(String(format: "%.0f%%", snapshot.cacheHit * 100), "cache")
-                Spacer()
-                cardStat(String(format: "\u{20AC}%.2f", snapshot.costEUR), "cost")
-            }
-
-            // ── Health + Context bars ──
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(snapshot.health)")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundStyle(healthColor(for: snapshot.health))
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(Color.gray.opacity(0.2))
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(healthColor(for: snapshot.health))
-                                .frame(width: geo.size.width * CGFloat(max(0, min(snapshot.health, 100))) / 100.0)
-                        }
-                    }
-                    .frame(height: 3)
-                }
-
-                if snapshot.lastContextTokens > 0 {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(String(format: "%.0f%%", min(snapshot.contextPercent * 100, 999)))
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundStyle(contextColor(for: snapshot.contextPercent))
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color.gray.opacity(0.2))
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(contextColor(for: snapshot.contextPercent))
-                                    .frame(width: geo.size.width * CGFloat(min(max(snapshot.contextPercent, 0), 1.0)))
-                            }
-                        }
-                        .frame(height: 3)
-                    }
-                }
-            }
+            cardHeader
+            cardStatusLine
+            cardCurrentActivity
+            cardStats
+            cardBars
+            cardActions
         }
         .padding(10)
         .background(
@@ -159,7 +81,169 @@ struct AgentCardView: View {
         .onTapGesture { onTap() }
     }
 
+    // MARK: - Card Sections
+
+    private var cardHeader: some View {
+        HStack(spacing: 6) {
+            if snapshot.egiState > .dormant {
+                EGIGlyphView(state: snapshot.egiState, size: 14)
+            } else {
+                Circle()
+                    .fill(mood.color)
+                    .frame(width: 8, height: 8)
+                    .modifier(PulseEffect(isActive: isAgentActive, color: mood.color))
+            }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(pillar.name)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(pillar.color)
+                    .lineLimit(1)
+
+                if let branch = gitBranch {
+                    Text(branch)
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                } else if pillar.name == "Home" {
+                    Text(String(snapshot.sessionId.prefix(8)))
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(.quaternary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            Text(modelShortName(snapshot.model))
+                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                .foregroundStyle(modelColor(snapshot.model))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(
+                    Capsule()
+                        .fill(modelColor(snapshot.model).opacity(0.12))
+                )
+        }
+    }
+
+    private var cardStatusLine: some View {
+        HStack(spacing: 4) {
+            Text(mood.status)
+                .font(.system(size: 10, design: .rounded))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text("\u{00B7}")
+                .font(.system(size: 10))
+                .foregroundStyle(.quaternary)
+            Text(formatUptime(snapshot.startTime))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .foregroundStyle(.tertiary)
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var cardCurrentActivity: some View {
+        if let toolName = snapshot.lastToolName {
+            HStack(spacing: 4) {
+                Image(systemName: isAgentActive ? "bolt.fill" : "clock")
+                    .font(.system(size: 7))
+                    .foregroundColor(isAgentActive ? Color(hex: "#00d4aa") : Color.gray)
+                Text(toolName)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundColor(isAgentActive ? .white : .gray)
+                if let target = snapshot.lastToolTarget {
+                    Text(target)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(isAgentActive ? Color.white.opacity(0.6) : Color.gray.opacity(0.5))
+                }
+            }
+            .lineLimit(1)
+        }
+    }
+
+    private var cardStats: some View {
+        HStack(spacing: 0) {
+            cardStat(String(format: "%.0f", snapshot.tokenMin), "t/m")
+            Spacer()
+            cardStat(String(format: "%.0f%%", snapshot.cacheHit * 100), "cache")
+            Spacer()
+            cardStat(String(format: "\u{20AC}%.2f", snapshot.costEUR), "cost")
+        }
+    }
+
+    private var cardBars: some View {
+        HStack(spacing: 8) {
+            miniBar(value: max(0, min(snapshot.health, 100)), max: 100,
+                    label: "\(snapshot.health)", color: healthColor(for: snapshot.health))
+
+            if snapshot.lastContextTokens > 0 {
+                let pct = min(snapshot.contextPercent, 1.0)
+                miniBar(value: Int(pct * 100), max: 100,
+                        label: String(format: "%.0f%%", min(snapshot.contextPercent * 100, 999)),
+                        color: contextColor(for: snapshot.contextPercent))
+            }
+        }
+    }
+
+    private var cardActions: some View {
+        HStack(spacing: 8) {
+            Button(action: { openTerminal() }) {
+                HStack(spacing: 3) {
+                    Image(systemName: "terminal")
+                        .font(.system(size: 8))
+                    Text("Open")
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                }
+                .foregroundStyle(pillar.color.opacity(0.7))
+            }
+            .buttonStyle(.borderless)
+            .disabled(cwd == nil)
+
+            Spacer()
+
+            if snapshot.subagentCount > 0 {
+                HStack(spacing: 2) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 7))
+                    Text("\(snapshot.subagentCount)")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                }
+                .foregroundStyle(Color(hex: "#4A9EFF"))
+            }
+
+            if snapshot.errorRate > 0.01 {
+                HStack(spacing: 2) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 7))
+                    Text(String(format: "%.0f%%", snapshot.errorRate * 100))
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                }
+                .foregroundStyle(Color(hex: "#FF4444"))
+            }
+        }
+    }
+
     // MARK: - Components
+
+    private func miniBar(value: Int, max: Int, label: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(color)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.gray.opacity(0.2))
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(color)
+                        .frame(width: geo.size.width * CGFloat(value) / CGFloat(max))
+                }
+            }
+            .frame(height: 3)
+        }
+    }
 
     private func cardStat(_ value: String, _ label: String) -> some View {
         HStack(spacing: 2) {
@@ -169,6 +253,15 @@ struct AgentCardView: View {
             Text(label)
                 .font(.system(size: 8, design: .monospaced))
                 .foregroundStyle(.tertiary)
+        }
+    }
+
+    private func openTerminal() {
+        guard let dir = cwd else { return }
+        let script = "tell application \"Terminal\" to do script \"cd \(dir.replacingOccurrences(of: "\"", with: "\\\""))\""
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
         }
     }
 }
@@ -203,9 +296,37 @@ struct AgentDetailPanel: View {
                     .padding(.vertical, 1)
                     .background(Capsule().fill(modelColor(snapshot.model).opacity(0.12)))
                 Spacer()
-                Text("DETAILS")
-                    .font(.system(size: 8, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.tertiary)
+
+                // Open Terminal
+                Button(action: { openTerminal() }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "terminal")
+                            .font(.system(size: 8))
+                        Text("Open")
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    }
+                    .foregroundStyle(pillar.color.opacity(0.7))
+                }
+                .buttonStyle(.borderless)
+                .disabled(cwd == nil)
+
+                // Kill
+                Button(action: {
+                    resolvedPID = ProcessResolver.findPID(for: cwd)
+                    if resolvedPID != nil {
+                        showKillConfirmation = true
+                    }
+                }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "xmark.circle")
+                            .font(.system(size: 8))
+                        Text("Kill")
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    }
+                    .foregroundStyle(Color(hex: "#FF4444").opacity(0.5))
+                }
+                .buttonStyle(.borderless)
+                .disabled(cwd == nil)
             }
 
             // Stats grid
@@ -270,25 +391,6 @@ struct AgentDetailPanel: View {
                 }
 
                 Spacer()
-
-                // Kill button
-                Button(action: {
-                    resolvedPID = ProcessResolver.findPID(for: cwd)
-                    if resolvedPID != nil {
-                        showKillConfirmation = true
-                    }
-                }) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "xmark.circle")
-                            .font(.system(size: 8))
-                        Text("Kill")
-                            .font(.system(size: 8, weight: .medium, design: .monospaced))
-                    }
-                    .foregroundStyle(.secondary.opacity(0.5))
-                }
-                .buttonStyle(.borderless)
-                .disabled(cwd == nil)
-                .opacity(cwd == nil ? 0.3 : 1.0)
             }
         }
         .padding(.horizontal, 12)
@@ -334,5 +436,14 @@ struct AgentDetailPanel: View {
         if tokens >= 1_000_000 { return String(format: "%.1fM", Double(tokens) / 1_000_000) }
         if tokens >= 1_000 { return String(format: "%.0fK", Double(tokens) / 1_000) }
         return "\(tokens)"
+    }
+
+    private func openTerminal() {
+        guard let dir = cwd else { return }
+        let script = "tell application \"Terminal\" to do script \"cd \(dir.replacingOccurrences(of: "\"", with: "\\\""))\""
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
+        }
     }
 }
