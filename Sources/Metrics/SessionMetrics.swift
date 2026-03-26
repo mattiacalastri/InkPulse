@@ -25,9 +25,9 @@ final class SessionMetrics {
     /// EGI state tracker.
     private(set) var egiTracker = EGITracker()
 
-    /// Queue operations for subagent tracking.
-    private var enqueueCount: Int = 0
-    private var completeCount: Int = 0
+    /// Subagent tracking via Agent tool uses (not queue-operations).
+    /// queue-operations are user messages queued while Claude is busy, NOT subagents.
+    private var agentToolSpawnCount: Int = 0
 
     /// Cumulative cache counters.
     private var totalInput: Int = 0
@@ -100,11 +100,14 @@ final class SessionMetrics {
                 lastToolTarget = lastTool.target
             }
 
-            // Task name tracking
+            // Task name tracking + subagent counting
             for tool in msg.toolUses {
                 if (tool.name == "TaskCreate" || tool.name == "TaskUpdate"),
                    let subject = tool.subject {
                     activeTaskName = subject
+                }
+                if tool.name == "Agent" {
+                    agentToolSpawnCount += 1
                 }
             }
 
@@ -145,12 +148,10 @@ final class SessionMetrics {
                 }
             }
 
-        case .queueOperation(let operation, _, _):
-            if operation == "enqueue" {
-                enqueueCount += 1
-            } else if operation == "complete" {
-                completeCount += 1
-            }
+        case .queueOperation:
+            // queue-operations are user messages queued while Claude is busy.
+            // They are NOT subagent spawns — ignore for subagent tracking.
+            break
 
         case .user(let errorCount, let timestamp, _):
             // Tool result errors from user events
@@ -221,8 +222,8 @@ final class SessionMetrics {
             cacheHit = Double(totalCacheRead) / Double(cacheDenom)
         }
 
-        // 7. subagentCount
-        let subagentCount = max(enqueueCount - completeCount, 0)
+        // 7. subagentCount (from Agent tool uses, not queue-operations)
+        let subagentCount = agentToolSpawnCount
 
         // 8. costEUR already tracked cumulatively
 
