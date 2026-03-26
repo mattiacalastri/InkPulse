@@ -294,9 +294,6 @@ struct AgentDetailPanel: View {
     let snapshot: MetricsSnapshot
     let cwd: String?
 
-    @State private var showKillConfirmation = false
-    @State private var resolvedPID: pid_t?
-
     private var pillar: PillarInfo { PillarInfo.from(cwd: cwd, inferredProject: snapshot.inferredProject) }
 
     var body: some View {
@@ -315,14 +312,6 @@ struct AgentDetailPanel: View {
                         .stroke(pillar.color.opacity(0.2), lineWidth: 1)
                 )
         )
-        .alert("Terminate Session?", isPresented: $showKillConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Terminate", role: .destructive) {
-                if let pid = resolvedPID { SessionKiller.kill(pid: pid) }
-            }
-        } message: {
-            Text("Terminate \(pillar.name)?")
-        }
     }
 
     private var panelHeader: some View {
@@ -344,17 +333,6 @@ struct AgentDetailPanel: View {
                     .foregroundStyle(pillar.color)
             }
             .buttonStyle(.borderless)
-
-            Button(action: {
-                resolvedPID = ProcessResolver.findPID(for: cwd)
-                if resolvedPID != nil { showKillConfirmation = true }
-            }) {
-                Label("Kill", systemImage: "xmark.circle")
-                    .font(.system(size: 9, weight: .medium, design: .rounded))
-                    .foregroundColor(Color(hex: "#FF4444").opacity(0.5))
-            }
-            .buttonStyle(.borderless)
-            .disabled(cwd == nil)
         }
     }
 

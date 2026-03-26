@@ -13,6 +13,7 @@ final class QuotaFetcher {
     private var timer: Timer?
     private(set) var lastSnapshot: QuotaSnapshot?
     private var onUpdate: ((QuotaSnapshot?) -> Void)?
+    private var cachedToken: String?
 
     // MARK: - Lifecycle
 
@@ -85,13 +86,20 @@ final class QuotaFetcher {
 
     // MARK: - Token Resolution
 
-    /// Reads the OAuth access token from macOS Keychain.
-    /// Service: "Claude Code-credentials", extracts accessToken from JSON blob.
+    /// Reads the OAuth access token. Caches after first read to avoid repeated Keychain prompts.
     private func resolveToken() -> String? {
-        // Try Keychain first
-        if let keychainToken = readFromKeychain() { return keychainToken }
-        // Fallback: ~/.claude/.credentials.json
-        if let fileToken = readFromFile() { return fileToken }
+        if let cached = cachedToken { return cached }
+        // Try file first (no prompt)
+        if let fileToken = readFromFile() {
+            cachedToken = fileToken
+            return fileToken
+        }
+        // Keychain fallback — will prompt ONCE, then cached for session lifetime
+        if let keychainToken = readFromKeychain() {
+            cachedToken = keychainToken
+            AppState.log("QuotaFetcher: token cached from Keychain (no more prompts this session)")
+            return keychainToken
+        }
         return nil
     }
 
