@@ -17,6 +17,14 @@ struct PopoverView: View {
 
     private var stats: DashboardStats { DashboardStats(appState: appState) }
 
+    private var headerSubtitle: String {
+        if appState.teamConfigs.isEmpty {
+            return "\(stats.snaps.count) agents \u{00B7} \(Int(stats.uptimeMin))m uptime"
+        }
+        let teamCount = appState.teamConfigs.count
+        return "\(teamCount) teams \u{00B7} \(stats.snaps.count) agents \u{00B7} \(Int(stats.uptimeMin))m uptime"
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -46,7 +54,7 @@ struct PopoverView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("InkPulse")
                         .font(.system(size: 16, weight: .bold, design: .rounded))
-                    Text("\(stats.snaps.count) agents · \(Int(stats.uptimeMin))m uptime")
+                    Text(headerSubtitle)
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
@@ -129,52 +137,13 @@ struct PopoverView: View {
 
             Divider().padding(.horizontal, 8)
 
-            // ── AGENTS ──
-            if stats.snaps.isEmpty {
-                Text("No active agents")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 12)
+            // ── TEAMS + AGENTS ──
+            if appState.teamConfigs.isEmpty {
+                // No teams configured — show flat agent list (legacy)
+                flatAgentList
             } else {
-                ScrollView {
-                    VStack(spacing: 8) {
-                        LazyVGrid(
-                            columns: [
-                                GridItem(.flexible(), spacing: 8),
-                                GridItem(.flexible(), spacing: 8)
-                            ],
-                            spacing: 8
-                        ) {
-                            ForEach(stats.snaps, id: \.sessionId) { snap in
-                                AgentCardView(
-                                    snapshot: snap,
-                                    filePath: appState.sessionFilePaths[snap.sessionId],
-                                    cwd: appState.sessionCwds[snap.sessionId],
-                                    gitBranch: appState.sessionBranches[snap.sessionId],
-                                    isExpanded: expandedSessionId == snap.sessionId,
-                                    onTap: {
-                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                            expandedSessionId = expandedSessionId == snap.sessionId ? nil : snap.sessionId
-                                        }
-                                    }
-                                )
-                            }
-                        }
-
-                        // Expanded detail panel (full-width, below grid)
-                        if let expandedId = expandedSessionId,
-                           let snap = stats.snaps.first(where: { $0.sessionId == expandedId }) {
-                            AgentDetailPanel(
-                                snapshot: snap,
-                                cwd: appState.sessionCwds[snap.sessionId]
-                            )
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                        }
-                    }
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                }
-                .frame(height: agentsScrollHeight)
+                // Team-based view
+                teamAgentList
             }
 
             Divider().padding(.horizontal, 8)
@@ -272,5 +241,138 @@ struct PopoverView: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(.trailing, 8)
+    }
+
+    // MARK: - Team Agent List
+
+    private var teamAgentList: some View {
+        ScrollView {
+            VStack(spacing: 10) {
+                ForEach(appState.teamStates) { team in
+                    TeamSectionView(
+                        teamState: team,
+                        sessionCwds: appState.sessionCwds,
+                        sessionBranches: appState.sessionBranches,
+                        sessionFilePaths: appState.sessionFilePaths,
+                        expandedSessionId: $expandedSessionId,
+                        isPopover: true
+                    )
+                }
+
+                // Unmatched sessions (not belonging to any team)
+                if !unmatchedSnaps.isEmpty {
+                    unmatchedSection
+                }
+
+                // Expanded detail panel
+                if let expandedId = expandedSessionId,
+                   let snap = stats.snaps.first(where: { $0.sessionId == expandedId }) {
+                    AgentDetailPanel(
+                        snapshot: snap,
+                        cwd: appState.sessionCwds[snap.sessionId]
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 6)
+        }
+        .frame(height: agentsScrollHeight)
+    }
+
+    // MARK: - Flat Agent List (legacy, when no teams configured)
+
+    private var flatAgentList: some View {
+        Group {
+            if stats.snaps.isEmpty {
+                Text("No active agents")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 12)
+            } else {
+                ScrollView {
+                    VStack(spacing: 8) {
+                        LazyVGrid(
+                            columns: [
+                                GridItem(.flexible(), spacing: 8),
+                                GridItem(.flexible(), spacing: 8)
+                            ],
+                            spacing: 8
+                        ) {
+                            ForEach(stats.snaps, id: \.sessionId) { snap in
+                                AgentCardView(
+                                    snapshot: snap,
+                                    filePath: appState.sessionFilePaths[snap.sessionId],
+                                    cwd: appState.sessionCwds[snap.sessionId],
+                                    gitBranch: appState.sessionBranches[snap.sessionId],
+                                    isExpanded: expandedSessionId == snap.sessionId,
+                                    onTap: {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                            expandedSessionId = expandedSessionId == snap.sessionId ? nil : snap.sessionId
+                                        }
+                                    }
+                                )
+                            }
+                        }
+
+                        if let expandedId = expandedSessionId,
+                           let snap = stats.snaps.first(where: { $0.sessionId == expandedId }) {
+                            AgentDetailPanel(
+                                snapshot: snap,
+                                cwd: appState.sessionCwds[snap.sessionId]
+                            )
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                }
+                .frame(height: agentsScrollHeight)
+            }
+        }
+    }
+
+    // MARK: - Unmatched Sessions
+
+    private var unmatchedSnaps: [MetricsSnapshot] {
+        stats.snaps.filter { appState.unmatchedSessionIds.contains($0.sessionId) }
+    }
+
+    private var unmatchedSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 12)
+                Text("Other")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.vertical, 4)
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 8),
+                    GridItem(.flexible(), spacing: 8)
+                ],
+                spacing: 8
+            ) {
+                ForEach(unmatchedSnaps, id: \.sessionId) { snap in
+                    AgentCardView(
+                        snapshot: snap,
+                        filePath: appState.sessionFilePaths[snap.sessionId],
+                        cwd: appState.sessionCwds[snap.sessionId],
+                        gitBranch: appState.sessionBranches[snap.sessionId],
+                        isExpanded: expandedSessionId == snap.sessionId,
+                        onTap: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                expandedSessionId = expandedSessionId == snap.sessionId ? nil : snap.sessionId
+                            }
+                        }
+                    )
+                }
+            }
+        }
     }
 }

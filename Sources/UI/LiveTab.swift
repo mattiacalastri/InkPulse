@@ -80,7 +80,7 @@ struct LiveTab: View {
                 Text("InkPulse")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
-                Text("Heartbeat Monitor for Claude Code")
+                Text(appState.teamConfigs.isEmpty ? "Heartbeat Monitor for Claude Code" : "Control Plane for AI Agent Teams")
                     .font(.system(size: 13, design: .monospaced))
                     .foregroundStyle(Color(hex: "#00d4aa").opacity(0.7))
                 Text("\(stats.snaps.count) agents · \(Int(stats.uptimeMin))m uptime")
@@ -301,15 +301,100 @@ struct LiveTab: View {
                 Image(systemName: "person.3.fill")
                     .foregroundStyle(Color(hex: "#00d4aa"))
                     .font(.caption)
-                Text("ACTIVE AGENTS")
+                Text(appState.teamConfigs.isEmpty ? "ACTIVE AGENTS" : "TEAMS")
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.5))
                 Spacer()
-                Text("\(stats.snaps.count) sessions")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.25))
+                if appState.teamConfigs.isEmpty {
+                    Text("\(stats.snaps.count) sessions")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.25))
+                } else {
+                    Text("\(appState.teamConfigs.count) teams \u{00B7} \(stats.snaps.count) sessions")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.25))
+                }
             }
 
+            if appState.teamConfigs.isEmpty {
+                flatAgentsContent
+            } else {
+                teamAgentsContent
+            }
+        }
+    }
+
+    private var teamAgentsContent: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                ForEach(appState.teamStates) { team in
+                    TeamSectionView(
+                        teamState: team,
+                        sessionCwds: appState.sessionCwds,
+                        sessionBranches: appState.sessionBranches,
+                        sessionFilePaths: appState.sessionFilePaths,
+                        expandedSessionId: $expandedSessionId,
+                        isPopover: false
+                    )
+                }
+
+                // Unmatched sessions
+                let unmatchedSnaps = stats.snaps.filter { appState.unmatchedSessionIds.contains($0.sessionId) }
+                if !unmatchedSnaps.isEmpty {
+                    liveUnmatchedSection(snaps: unmatchedSnaps)
+                }
+
+                // Expanded detail panel
+                if let expandedId = expandedSessionId,
+                   let snap = stats.snaps.first(where: { $0.sessionId == expandedId }) {
+                    AgentDetailPanel(
+                        snapshot: snap,
+                        cwd: appState.sessionCwds[snap.sessionId]
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+        }
+        .frame(maxHeight: 500)
+    }
+
+    private func liveUnmatchedSection(snaps: [MetricsSnapshot]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("OTHER")
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.4))
+                Spacer()
+            }
+            .padding(.vertical, 4)
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 10),
+                    GridItem(.flexible(), spacing: 10)
+                ],
+                spacing: 10
+            ) {
+                ForEach(snaps, id: \.sessionId) { snap in
+                    AgentCardView(
+                        snapshot: snap,
+                        filePath: appState.sessionFilePaths[snap.sessionId],
+                        cwd: appState.sessionCwds[snap.sessionId],
+                        gitBranch: appState.sessionBranches[snap.sessionId],
+                        isExpanded: expandedSessionId == snap.sessionId,
+                        onTap: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                expandedSessionId = expandedSessionId == snap.sessionId ? nil : snap.sessionId
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    private var flatAgentsContent: some View {
+        Group {
             if stats.snaps.isEmpty {
                 Text("No active agents")
                     .font(.system(.caption, design: .monospaced))

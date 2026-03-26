@@ -13,6 +13,11 @@ final class AppState: ObservableObject {
     @Published var sessionBranches: [String: String] = [:] // sessionId → gitBranch
     @Published var quotaSnapshot: QuotaSnapshot?
 
+    // MARK: - Team State
+    @Published var teamConfigs: [TeamConfig] = []
+    @Published var teamStates: [TeamState] = []
+    @Published var unmatchedSessionIds: [String] = []
+
     private var heartbeatLogger: HeartbeatLogger?
     private var sessionWatcher: SessionWatcher?
     private var refreshTimer: Timer?
@@ -76,6 +81,10 @@ final class AppState: ObservableObject {
         notificationManager.requestAuthorization()
         anomalyWatcher = AnomalyWatcher(notificationManager: notificationManager)
 
+        // Load team configuration
+        teamConfigs = TeamsLoader.load()
+        AppState.log("Loaded \(teamConfigs.count) teams from teams.json")
+
         // Quota fetcher — OAuth token already approved in Keychain
         // Silently fails if not authorized — no popups
         quotaFetcher = QuotaFetcher()
@@ -108,6 +117,9 @@ final class AppState: ObservableObject {
 
         // Anomaly check
         anomalyWatcher?.check(sessions: metricsEngine.sessions, sessionCwds: sessionCwds)
+
+        // Team matching
+        refreshTeamStates()
 
         // Budget check (Feature 3)
         checkBudget()
@@ -195,6 +207,22 @@ final class AppState: ObservableObject {
 
     func openConfig() {
         showingConfig.toggle()
+    }
+
+    func reloadTeams() {
+        teamConfigs = TeamsLoader.load()
+        refreshTeamStates()
+        AppState.log("Reloaded \(teamConfigs.count) teams")
+    }
+
+    private func refreshTeamStates() {
+        let result = TeamsLoader.matchSessions(
+            teams: teamConfigs,
+            sessions: metricsEngine.sessions,
+            sessionCwds: sessionCwds
+        )
+        teamStates = result.teamStates
+        unmatchedSessionIds = result.unmatchedSessionIds
     }
 
     func forceRescan() {
