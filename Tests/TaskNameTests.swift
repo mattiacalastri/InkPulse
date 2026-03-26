@@ -4,12 +4,12 @@ import XCTest
 final class TaskNameTests: XCTestCase {
 
     func testToolUseInfoHasSubject() {
-        let info = ToolUseInfo(id: "t1", name: "TaskCreate", target: nil, subject: "Fix OAuth")
+        let info = ToolUseInfo(id: "t1", name: "TaskCreate", target: nil, fullPath: nil, subject: "Fix OAuth")
         XCTAssertEqual(info.subject, "Fix OAuth")
     }
 
     func testToolUseInfoNonTaskHasNilSubject() {
-        let info = ToolUseInfo(id: "t2", name: "Edit", target: "config.swift", subject: nil)
+        let info = ToolUseInfo(id: "t2", name: "Edit", target: "config.swift", fullPath: nil, subject: nil)
         XCTAssertNil(info.subject)
     }
 
@@ -45,7 +45,7 @@ final class TaskNameTests: XCTestCase {
             thinkingText: nil,
             outputText: nil,
             requestId: nil,
-            toolUses: [ToolUseInfo(id: "t1", name: "TaskCreate", target: nil, subject: "Fix OAuth")]
+            toolUses: [ToolUseInfo(id: "t1", name: "TaskCreate", target: nil, fullPath: nil, subject: "Fix OAuth")]
         )
         let event = ClaudeEvent.assistant(msg, timestamp: Date(), sessionId: "test")
         metrics.ingest(event)
@@ -60,7 +60,7 @@ final class TaskNameTests: XCTestCase {
             thinkingText: nil,
             outputText: nil,
             requestId: nil,
-            toolUses: [ToolUseInfo(id: "t1", name: "Edit", target: "test.swift", subject: nil)]
+            toolUses: [ToolUseInfo(id: "t1", name: "Edit", target: "test.swift", fullPath: nil, subject: nil)]
         )
         let event = ClaudeEvent.assistant(msg, timestamp: Date(), sessionId: "test")
         metrics.ingest(event)

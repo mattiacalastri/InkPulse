@@ -116,13 +116,14 @@ enum JSONLParser {
                           let toolName = block["name"] as? String {
                     let input = block["input"] as? [String: Any]
                     let target = extractToolTarget(from: input, toolName: toolName)
+                    let fullPath = extractFullPath(from: input)
                     let subject: String?
                     if toolName == "TaskCreate" || toolName == "TaskUpdate" {
                         subject = input?["subject"] as? String
                     } else {
                         subject = nil
                     }
-                    toolUses.append(ToolUseInfo(id: toolId, name: toolName, target: target, subject: subject))
+                    toolUses.append(ToolUseInfo(id: toolId, name: toolName, target: target, fullPath: fullPath, subject: subject))
                     registrySet(toolId, toolName)
                 }
             }
@@ -137,6 +138,16 @@ enum JSONLParser {
             toolUses: toolUses
         )
         return .assistant(msg, timestamp: timestamp, sessionId: sessionId)
+    }
+
+    // MARK: - Full Path Extraction (for project inference)
+
+    /// Extracts the raw file_path from tool_use input without truncation.
+    private static func extractFullPath(from input: [String: Any]?) -> String? {
+        guard let input = input,
+              let fp = input["file_path"] as? String,
+              fp.contains("/") else { return nil }
+        return fp
     }
 
     // MARK: - Tool Target Extraction

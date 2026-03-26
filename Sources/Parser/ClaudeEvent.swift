@@ -11,6 +11,7 @@ struct ToolUseInfo {
     let id: String
     let name: String
     let target: String?  // first argument (file_path, command, pattern), truncated to 30 chars
+    let fullPath: String?  // raw file_path for project inference (not truncated)
     let subject: String?  // from TaskCreate/TaskUpdate input.subject
 }
 

@@ -122,13 +122,14 @@ struct PillarInfo {
     ]
 
     /// Derives project identity from the working directory path.
-    /// Checks config overrides first, then known pillars, then falls back to last path component.
-    static func from(cwd: String?) -> PillarInfo {
+    /// Checks config overrides first, then known pillars, then inferred project from tool paths,
+    /// then falls back to last path component.
+    static func from(cwd: String?, inferredProject: String? = nil) -> PillarInfo {
         guard let cwd = cwd else { return .home }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        if cwd == home || URL(fileURLWithPath: cwd).lastPathComponent == NSUserName() { return .home }
+        let isHome = cwd == home || URL(fileURLWithPath: cwd).lastPathComponent == NSUserName()
 
-        // Config overrides first
+        // Config overrides first (even for Home, in case user mapped a known path)
         let config = ConfigLoader.load()
         for (pathKey, override) in config.pillarOverrides {
             if cwd.contains(pathKey) {
@@ -147,6 +148,14 @@ struct PillarInfo {
             }
         }
 
+        // Project inference from tool paths (when cwd is Home)
+        if isHome, let project = inferredProject, !project.isEmpty {
+            let short = String(project.prefix(2).uppercased())
+            return PillarInfo(name: project, color: Color(hex: "#4A9EFF"), shortName: short)
+        }
+
+        if isHome { return .home }
+
         // Fallback: last path component capitalized
         let last = URL(fileURLWithPath: cwd).lastPathComponent
         let capitalized = last.prefix(1).uppercased() + last.dropFirst()
@@ -161,8 +170,8 @@ struct PillarInfo {
 
 // MARK: - Project Name (uses PillarInfo)
 
-func projectName(from sessionId: String, filePath: String?, cwd: String?) -> String {
-    if cwd != nil { return PillarInfo.from(cwd: cwd).name }
+func projectName(from sessionId: String, filePath: String?, cwd: String?, inferredProject: String? = nil) -> String {
+    if cwd != nil { return PillarInfo.from(cwd: cwd, inferredProject: inferredProject).name }
     guard let path = filePath else { return String(sessionId.prefix(8)) }
     let components = path.components(separatedBy: "/")
     if let idx = components.firstIndex(of: "projects"), idx + 1 < components.count {

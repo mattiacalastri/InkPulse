@@ -31,6 +31,9 @@ struct MetricsSnapshot {
     let lastToolName: String?
     let lastToolTarget: String?
     let activeTaskName: String?
+
+    // Project inference (when cwd is Home)
+    let inferredProject: String?
 }
 
 // MARK: - MetricsEngine

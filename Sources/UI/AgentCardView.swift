@@ -57,7 +57,7 @@ struct AgentCardView: View {
     }
 
     private var pillar: PillarInfo {
-        PillarInfo.from(cwd: cwd)
+        PillarInfo.from(cwd: cwd, inferredProject: snapshot.inferredProject)
     }
 
     private var isAgentActive: Bool {
@@ -338,7 +338,7 @@ struct AgentDetailPanel: View {
     @State private var showKillConfirmation = false
     @State private var resolvedPID: pid_t?
 
-    private var pillar: PillarInfo { PillarInfo.from(cwd: cwd) }
+    private var pillar: PillarInfo { PillarInfo.from(cwd: cwd, inferredProject: snapshot.inferredProject) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

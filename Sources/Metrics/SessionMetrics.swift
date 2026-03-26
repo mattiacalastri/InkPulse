@@ -59,6 +59,12 @@ final class SessionMetrics {
     /// Active task name from TaskCreate/TaskUpdate progress events.
     private(set) var activeTaskName: String?
 
+    // MARK: - Project Inference (from tool file paths)
+
+    /// Ring buffer of recent full file paths from tool_use events (max 30).
+    private var recentToolPaths: [String] = []
+    private static let maxToolPaths = 30
+
     // MARK: - Init
 
     init(sessionId: String, startTime: Date) {
@@ -98,6 +104,16 @@ final class SessionMetrics {
             if let lastTool = msg.toolUses.last {
                 lastToolName = lastTool.name
                 lastToolTarget = lastTool.target
+            }
+
+            // Collect full paths for project inference
+            for tool in msg.toolUses {
+                if let fp = tool.fullPath {
+                    recentToolPaths.append(fp)
+                    if recentToolPaths.count > Self.maxToolPaths {
+                        recentToolPaths.removeFirst()
+                    }
+                }
             }
 
             // Task name tracking + subagent counting
@@ -164,6 +180,69 @@ final class SessionMetrics {
         case .system, .unknown:
             break
         }
+    }
+
+    // MARK: - Project Inference
+
+    /// Infers project name from the most frequent directory in collected tool paths.
+    /// Returns nil if no meaningful project can be determined.
+    var inferredProject: String? {
+        guard !recentToolPaths.isEmpty else { return nil }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+
+        // Directories that are structural containers, not project names
+        let containers: Set<String> = [
+            "Downloads", "projects", "Documents", "Desktop",
+            "Library", ".claude", "Applications", "tmp",
+            "clients", "src", "public", "assets"
+        ]
+
+        var candidates: [String: Int] = [:]
+
+        for path in recentToolPaths {
+            // Strip home prefix
+            var relative = path
+            if relative.hasPrefix(home) {
+                relative = String(relative.dropFirst(home.count))
+                if relative.hasPrefix("/") { relative = String(relative.dropFirst()) }
+            }
+
+            // Walk components, skip containers, take first meaningful one
+            let components = relative.components(separatedBy: "/")
+            var found: String? = nil
+            for component in components {
+                if component.isEmpty || component.hasPrefix(".") { continue }
+                if containers.contains(component) { continue }
+                found = component
+                break
+            }
+
+            if let project = found {
+                candidates[project, default: 0] += 1
+            }
+        }
+
+        // Winner = most frequent
+        guard let winner = candidates.max(by: { $0.value < $1.value })?.key else { return nil }
+        return Self.smartCapitalize(winner)
+    }
+
+    /// Smart capitalize: "luxguard" → "Luxguard", "my-project" → "My Project".
+    /// Leaves already-capitalized names unchanged.
+    static func smartCapitalize(_ name: String) -> String {
+        if name.isEmpty { return name }
+        if name.first?.isUppercase == true { return name }
+        if name.contains("-") {
+            return name.split(separator: "-")
+                .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+                .joined(separator: " ")
+        }
+        if name.contains("_") {
+            return name.split(separator: "_")
+                .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+                .joined(separator: " ")
+        }
+        return name.prefix(1).uppercased() + name.dropFirst()
     }
 
     // MARK: - Snapshot
@@ -303,7 +382,8 @@ final class SessionMetrics {
             contextPercent: contextPercent,
             lastToolName: lastToolName,
             lastToolTarget: lastToolTarget,
-            activeTaskName: activeTaskName
+            activeTaskName: activeTaskName,
+            inferredProject: inferredProject
         )
     }
 }

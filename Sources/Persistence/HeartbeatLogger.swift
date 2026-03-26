@@ -48,7 +48,7 @@ struct HeartbeatRecord: Codable {
         self.ts = formatter.string(from: snap.lastEventTime)
         self.sessionId = snap.sessionId
         self.project = nil
-        self.pillar = PillarInfo.pillarName(from: cwd)
+        self.pillar = PillarInfo.from(cwd: cwd, inferredProject: snap.inferredProject).name
         self.health = snap.health
         self.tokenMin = snap.tokenMin
         self.toolFreq = snap.toolFreq

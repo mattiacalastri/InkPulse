@@ -46,7 +46,8 @@ final class AnomalyWatcher {
                 let project = projectName(
                     from: sessionId,
                     filePath: nil,
-                    cwd: sessionCwds[sessionId]
+                    cwd: sessionCwds[sessionId],
+                    inferredProject: snapshot.inferredProject
                 )
 
                 notificationManager.send(
@@ -76,7 +77,8 @@ final class AnomalyWatcher {
                 let project = projectName(
                     from: sessionId,
                     filePath: nil,
-                    cwd: sessionCwds[sessionId]
+                    cwd: sessionCwds[sessionId],
+                    inferredProject: snapshot.inferredProject
                 )
 
                 notificationManager.send(
