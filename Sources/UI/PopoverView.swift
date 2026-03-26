@@ -261,7 +261,8 @@ struct PopoverView: View {
                         },
                         onSpawnRole: { role, config in
                             appState.spawnRole(role, team: config)
-                        }
+                        },
+                        wsConnected: appState.wsServer?.connectedSessionIds ?? []
                     )
                 }
 

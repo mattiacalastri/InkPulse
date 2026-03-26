@@ -26,6 +26,11 @@ final class AppState: ObservableObject {
     private(set) var anomalyWatcher: AnomalyWatcher?
     private var quotaFetcher: QuotaFetcher?
 
+    // MARK: - WebSocket + Events
+    private(set) var wsServer: WSServer?
+    @Published var sessionRegistry = SessionRegistry()
+    private var eventDetector: EventDetector?
+
     private let maxTokenHistory = 300  // ~5 min at 1 sample/s
 
     /// Previous aggregate health for delta arrow.
@@ -85,8 +90,23 @@ final class AppState: ObservableObject {
         teamConfigs = TeamsLoader.load()
         AppState.log("Loaded \(teamConfigs.count) teams from teams.json")
 
-        // Quota fetcher — OAuth token already approved in Keychain
-        // Silently fails if not authorized — no popups
+        // WebSocket server
+        wsServer = WSServer()
+        wsServer?.onStatusReceived = { [weak self] status in
+            Task { @MainActor in self?.sessionRegistry.updateStatus(status) }
+        }
+        wsServer?.onSessionConnected = { [weak self] sessionId in
+            Task { @MainActor in self?.sessionRegistry.register(sessionId: sessionId) }
+        }
+        wsServer?.onSessionDisconnected = { [weak self] sessionId in
+            Task { @MainActor in self?.sessionRegistry.unregister(sessionId: sessionId) }
+        }
+        wsServer?.start()
+
+        // Event detector
+        eventDetector = EventDetector(notificationManager: notificationManager)
+
+        // Quota fetcher — file-only token, no popups
         quotaFetcher = QuotaFetcher()
         quotaFetcher?.start { [weak self] snapshot in
             Task { @MainActor in
@@ -120,6 +140,9 @@ final class AppState: ObservableObject {
 
         // Team matching
         refreshTeamStates()
+
+        // Event detection (deploy, errors, idle)
+        eventDetector?.check(sessions: metricsEngine.sessions, sessionCwds: sessionCwds)
 
         // Budget check (Feature 3)
         checkBudget()
@@ -250,6 +273,12 @@ final class AppState: ObservableObject {
                 body: "\(team.name)/\(role.name) is now running"
             )
         }
+    }
+
+    func sendTask(_ prompt: String, to sessionId: String) {
+        let message = WSOutbound.command(WSCommandMessage(action: "task", prompt: prompt))
+        wsServer?.send(message, to: sessionId)
+        AppState.log("Sent task to \(sessionId): \(prompt.prefix(50))")
     }
 
     func forceRescan() {
