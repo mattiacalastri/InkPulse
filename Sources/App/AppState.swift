@@ -219,10 +219,37 @@ final class AppState: ObservableObject {
         let result = TeamsLoader.matchSessions(
             teams: teamConfigs,
             sessions: metricsEngine.sessions,
-            sessionCwds: sessionCwds
+            sessionCwds: sessionCwds,
+            previousStates: teamStates
         )
         teamStates = result.teamStates
         unmatchedSessionIds = result.unmatchedSessionIds
+    }
+
+    // MARK: - Spawn
+
+    func spawnTeam(_ team: TeamConfig, occupiedRoleIds: Set<String>) {
+        let results = TeamSpawner.spawnTeam(team, occupiedRoleIds: occupiedRoleIds)
+        let succeeded = results.filter(\.success).count
+        let total = results.count
+        AppState.log("Spawned team \(team.name): \(succeeded)/\(total) roles")
+        if succeeded > 0 {
+            notificationManager.send(
+                title: "Team Spawned",
+                body: "\(team.name): \(succeeded) agent\(succeeded == 1 ? "" : "s") launched"
+            )
+        }
+    }
+
+    func spawnRole(_ role: RoleConfig, team: TeamConfig) {
+        let success = TeamSpawner.spawnRole(role, team: team)
+        AppState.log("Spawn \(team.name)/\(role.name): \(success ? "OK" : "FAILED")")
+        if success {
+            notificationManager.send(
+                title: "Agent Spawned",
+                body: "\(team.name)/\(role.name) is now running"
+            )
+        }
     }
 
     func forceRescan() {

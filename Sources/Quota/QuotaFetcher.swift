@@ -1,5 +1,4 @@
 import Foundation
-import Security
 
 /// Fetches real quota data from Anthropic's OAuth usage endpoint.
 /// Token is read from macOS Keychain (service: "Claude Code-credentials").
@@ -86,62 +85,15 @@ final class QuotaFetcher {
 
     // MARK: - Token Resolution
 
-    /// Reads the OAuth access token. Caches after first read to avoid repeated Keychain prompts.
+    /// Reads the OAuth access token from file only. Never touches Keychain to avoid password prompts.
     private func resolveToken() -> String? {
         if let cached = cachedToken { return cached }
-        // Try file first (no prompt)
+        // File only — no Keychain access, no password prompts, ever.
         if let fileToken = readFromFile() {
             cachedToken = fileToken
             return fileToken
         }
-        // Keychain fallback — will prompt ONCE, then cached for session lifetime
-        if let keychainToken = readFromKeychain() {
-            cachedToken = keychainToken
-            AppState.log("QuotaFetcher: token cached from Keychain (no more prompts this session)")
-            return keychainToken
-        }
-        return nil
-    }
-
-    private func readFromKeychain() -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "Claude Code-credentials",
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        guard status == errSecSuccess, let data = result as? Data else {
-            if status == -128 {
-                AppState.log("QuotaFetcher: Keychain access denied by user (click 'Always Allow' when prompted)")
-            } else {
-                AppState.log("QuotaFetcher: Keychain read failed (status \(status))")
-            }
-            return nil
-        }
-
-        // The Keychain entry is JSON: {"claudeAiOauth":{"accessToken":"sk-ant-oat...",...}}
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            let str = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let str, str.hasPrefix("sk-ant-") { return str }
-            AppState.log("QuotaFetcher: Keychain data not parseable")
-            return nil
-        }
-
-        // Try nested: claudeAiOauth.accessToken
-        if let oauth = json["claudeAiOauth"] as? [String: Any],
-           let token = oauth["accessToken"] as? String {
-            return token
-        }
-        // Try flat: accessToken / access_token
-        if let token = json["accessToken"] as? String ?? json["access_token"] as? String {
-            return token
-        }
-
-        AppState.log("QuotaFetcher: no accessToken in Keychain JSON")
+        AppState.log("QuotaFetcher: no file token found — skipping Keychain to avoid password prompt")
         return nil
     }
 
