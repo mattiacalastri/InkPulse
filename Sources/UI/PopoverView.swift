@@ -255,7 +255,13 @@ struct PopoverView: View {
                         sessionBranches: appState.sessionBranches,
                         sessionFilePaths: appState.sessionFilePaths,
                         expandedSessionId: $expandedSessionId,
-                        isPopover: true
+                        isPopover: true,
+                        onSpawnTeam: { config, occupied in
+                            appState.spawnTeam(config, occupiedRoleIds: occupied)
+                        },
+                        onSpawnRole: { role, config in
+                            appState.spawnRole(role, team: config)
+                        }
                     )
                 }
 

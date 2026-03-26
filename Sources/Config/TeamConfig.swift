@@ -83,37 +83,30 @@ enum TeamsLoader {
         return file.teams
     }
 
-    /// Creates a default teams.json with example configuration.
-    static func createDefault() {
-        let example = TeamsFile(teams: [
-            TeamConfig(
-                id: "example",
-                name: "My Project",
-                cwd: "~/projects/my-project",
-                color: "#00d4aa",
-                roles: [
-                    RoleConfig(id: "pm", name: "PM", prompt: "You are the Project Manager.", icon: "chart.bar.fill"),
-                    RoleConfig(id: "dev", name: "Dev", prompt: "You are the Lead Developer.", icon: "hammer.fill"),
-                    RoleConfig(id: "researcher", name: "Researcher", prompt: "You are the R&D Researcher.", icon: "magnifyingglass"),
-                ]
-            )
-        ])
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(example) else { return }
-        try? data.write(to: teamsFile, options: .atomic)
-    }
-
     // MARK: - Session Matching
 
     /// Matches active sessions to team/role slots by cwd.
     /// Returns TeamState array with sessions slotted into roles,
     /// plus an array of unmatched session IDs.
+    ///
+    /// Stable matching: sessions sorted by startTime (oldest first) for deterministic
+    /// assignment. Previous assignments are preserved when possible to prevent flickering.
     static func matchSessions(
         teams: [TeamConfig],
         sessions: [String: MetricsSnapshot],
-        sessionCwds: [String: String]
+        sessionCwds: [String: String],
+        previousStates: [TeamState] = []
     ) -> (teamStates: [TeamState], unmatchedSessionIds: [String]) {
+
+        // Build lookup of previous role->session assignments for stability
+        var previousAssignments: [String: String] = [:] // "teamId/roleId" -> sessionId
+        for state in previousStates {
+            for slot in state.slots {
+                if let sid = slot.sessionId {
+                    previousAssignments["\(state.id)/\(slot.id)"] = sid
+                }
+            }
+        }
 
         var matchedSessionIds = Set<String>()
         var teamStates: [TeamState] = []
@@ -121,34 +114,56 @@ enum TeamsLoader {
         for team in teams {
             let resolvedCwd = team.resolvedCwd
 
-            // Find all sessions whose cwd matches this team's cwd
-            let matchingSessions = sessionCwds.filter { _, cwd in
-                cwd == resolvedCwd || cwd.hasPrefix(resolvedCwd + "/")
-            }
+            // Find all sessions whose cwd matches this team's cwd.
+            // Sort by sessionId for deterministic order.
+            let matchingSessionIds = sessionCwds
+                .filter { _, cwd in cwd == resolvedCwd || cwd.hasPrefix(resolvedCwd + "/") }
+                .keys
+                .filter { sessions[$0] != nil }
+                .sorted()
 
+            var availableIds = Set(matchingSessionIds)
             var slots: [RoleSlot] = []
-            var availableSessions = Array(matchingSessions.keys)
 
+            // First pass: preserve previous assignments if session is still available
             for role in team.roles {
                 var slot = RoleSlot(id: role.id, role: role)
+                let key = "\(team.id)/\(role.id)"
 
-                // Assign first available matching session to this role slot
-                if let sessionId = availableSessions.first,
-                   let snapshot = sessions[sessionId] {
+                if let prevSid = previousAssignments[key],
+                   availableIds.contains(prevSid),
+                   let snapshot = sessions[prevSid] {
+                    // Keep previous assignment — no flicker
                     slot.session = snapshot
-                    slot.sessionId = sessionId
-                    slot.cwd = sessionCwds[sessionId]
-                    matchedSessionIds.insert(sessionId)
-                    availableSessions.removeFirst()
+                    slot.sessionId = prevSid
+                    slot.cwd = sessionCwds[prevSid]
+                    matchedSessionIds.insert(prevSid)
+                    availableIds.remove(prevSid)
                 }
 
                 slots.append(slot)
             }
 
+            // Second pass: fill remaining vacant slots with unassigned sessions
+            let remainingIds = availableIds.sorted()
+            var remainingIdx = 0
+            for i in 0..<slots.count {
+                if slots[i].session == nil, remainingIdx < remainingIds.count {
+                    let sid = remainingIds[remainingIdx]
+                    if let snapshot = sessions[sid] {
+                        slots[i].session = snapshot
+                        slots[i].sessionId = sid
+                        slots[i].cwd = sessionCwds[sid]
+                        matchedSessionIds.insert(sid)
+                    }
+                    remainingIdx += 1
+                }
+            }
+
             teamStates.append(TeamState(id: team.id, config: team, slots: slots))
         }
 
-        let unmatchedIds = sessions.keys.filter { !matchedSessionIds.contains($0) }
-        return (teamStates, Array(unmatchedIds))
+        let unmatchedIds = sessions.keys.filter { !matchedSessionIds.contains($0) }.sorted()
+        return (teamStates, unmatchedIds)
     }
 }

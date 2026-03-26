@@ -9,10 +9,15 @@ struct TeamSectionView: View {
     let sessionFilePaths: [String: String]
     @Binding var expandedSessionId: String?
     let isPopover: Bool
+    var onSpawnTeam: ((TeamConfig, Set<String>) -> Void)?
+    var onSpawnRole: ((RoleConfig, TeamConfig) -> Void)?
 
     @State private var isExpanded = true
+    @State private var isSpawning = false
 
     private var team: TeamConfig { teamState.config }
+    private var vacantCount: Int { teamState.slots.filter { !$0.isOccupied }.count }
+    private var occupiedRoleIds: Set<String> { Set(teamState.slots.filter { $0.isOccupied }.map(\.id)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -36,6 +41,9 @@ struct TeamSectionView: View {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                     expandedSessionId = expandedSessionId == sid ? nil : sid
                                 }
+                            },
+                            onSpawn: {
+                                onSpawnRole?(slot.role, team)
                             }
                         )
                     }
@@ -47,55 +55,74 @@ struct TeamSectionView: View {
     // MARK: - Team Header
 
     private var teamHeader: some View {
-        Button(action: { withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() } }) {
-            HStack(spacing: 8) {
-                // Expand/collapse chevron
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(team.resolvedColor.opacity(0.6))
-                    .frame(width: 12)
+        HStack(spacing: 8) {
+            // Collapse button (left side)
+            Button(action: { withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() } }) {
+                HStack(spacing: 8) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(team.resolvedColor.opacity(0.6))
+                        .frame(width: 12)
 
-                // Team color dot
-                Circle()
-                    .fill(team.resolvedColor)
-                    .frame(width: 8, height: 8)
+                    Circle()
+                        .fill(team.resolvedColor)
+                        .frame(width: 8, height: 8)
 
-                // Team name
-                Text(team.name)
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(isPopover ? Color.primary : Color.white)
+                    Text(team.name)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(isPopover ? Color.primary : Color.white)
 
-                // Active count badge
-                if teamState.activeCount > 0 {
-                    Text("\(teamState.activeCount) active")
-                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(team.resolvedColor)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule().fill(team.resolvedColor.opacity(0.12))
-                        )
-                }
-
-                Spacer()
-
-                // Aggregate stats
-                if teamState.activeCount > 0 {
-                    HStack(spacing: 8) {
-                        if teamState.combinedHealth >= 0 {
-                            Text("\(teamState.combinedHealth)")
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                .foregroundStyle(healthColor(for: teamState.combinedHealth))
-                        }
-                        Text(String(format: "€%.2f", teamState.totalCost))
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                    if teamState.activeCount > 0 {
+                        Text("\(teamState.activeCount) active")
+                            .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(team.resolvedColor)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(team.resolvedColor.opacity(0.12)))
                     }
                 }
             }
-            .padding(.vertical, 4)
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            // Aggregate stats
+            if teamState.activeCount > 0 {
+                HStack(spacing: 8) {
+                    if teamState.combinedHealth >= 0 {
+                        Text("\(teamState.combinedHealth)")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(healthColor(for: teamState.combinedHealth))
+                    }
+                    Text(String(format: "€%.2f", teamState.totalCost))
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Spawn Team button
+            if vacantCount > 0, onSpawnTeam != nil {
+                Button(action: {
+                    isSpawning = true
+                    onSpawnTeam?(team, occupiedRoleIds)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { isSpawning = false }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: isSpawning ? "hourglass" : "play.fill")
+                            .font(.system(size: 8))
+                        Text(isSpawning ? "Spawning..." : "Spawn")
+                            .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(team.resolvedColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(team.resolvedColor.opacity(0.12)))
+                }
+                .buttonStyle(.borderless)
+                .disabled(isSpawning)
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 4)
     }
 }
 
@@ -110,6 +137,9 @@ struct RoleCardView: View {
     let isExpanded: Bool
     let isPopover: Bool
     let onTap: () -> Void
+    var onSpawn: (() -> Void)?
+
+    @State private var isSpawning = false
 
     private var isOccupied: Bool { slot.isOccupied }
 
@@ -251,13 +281,34 @@ struct RoleCardView: View {
     // MARK: - Vacant Content
 
     private var vacantContent: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             Text("not running")
                 .font(.system(size: 9, design: .monospaced))
                 .foregroundStyle(.tertiary)
+
+            if let onSpawn {
+                Button(action: {
+                    isSpawning = true
+                    onSpawn()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { isSpawning = false }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: isSpawning ? "hourglass" : "play.fill")
+                            .font(.system(size: 8))
+                        Text(isSpawning ? "Spawning..." : "Spawn")
+                            .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(teamColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(teamColor.opacity(0.1)))
+                }
+                .buttonStyle(.borderless)
+                .disabled(isSpawning)
+            }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
     }
 
     // MARK: - Background

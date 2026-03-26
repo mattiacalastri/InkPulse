@@ -334,7 +334,13 @@ struct LiveTab: View {
                         sessionBranches: appState.sessionBranches,
                         sessionFilePaths: appState.sessionFilePaths,
                         expandedSessionId: $expandedSessionId,
-                        isPopover: false
+                        isPopover: false,
+                        onSpawnTeam: { config, occupied in
+                            appState.spawnTeam(config, occupiedRoleIds: occupied)
+                        },
+                        onSpawnRole: { role, config in
+                            appState.spawnRole(role, team: config)
+                        }
                     )
                 }
 
@@ -446,7 +452,7 @@ struct LiveTab: View {
 
     private var footer: some View {
         HStack {
-            Text("v1.3.0 · by Mattia Calastri · Astra Digital")
+            Text("v2.0.0 · by Mattia Calastri · Astra Digital")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.25))
             Spacer()
