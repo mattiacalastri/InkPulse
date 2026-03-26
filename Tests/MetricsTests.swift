@@ -29,7 +29,8 @@ final class MetricsTests: XCTestCase {
             usage: usage,
             thinkingText: thinkingText,
             outputText: outputText,
-            requestId: nil
+            requestId: nil,
+            toolUses: []
         )
         return .assistant(msg, timestamp: baseDate.addingTimeInterval(offset), sessionId: sid)
     }
@@ -37,6 +38,7 @@ final class MetricsTests: XCTestCase {
     private func makeToolEvent(isError: Bool = false, at offset: TimeInterval = 0) -> ClaudeEvent {
         .progress(
             toolUseID: "tool-\(UUID().uuidString.prefix(4))",
+            toolName: "Bash",
             isToolUse: true,
             isError: isError,
             timestamp: baseDate.addingTimeInterval(offset),
@@ -126,9 +128,9 @@ final class MetricsTests: XCTestCase {
         let session = SessionMetrics(sessionId: sid, startTime: baseDate)
 
         // 1M input + 100K output on opus
-        // Input: 1_000_000 / 1_000_000 * 15.0 = $15.0
-        // Output: 100_000 / 1_000_000 * 75.0 = $7.5
-        // Total USD: $22.5 → EUR: 22.5 * 0.92 = 20.7
+        // Input: 1_000_000 / 1_000_000 * 5.0 = $5.0
+        // Output: 100_000 / 1_000_000 * 25.0 = $2.5
+        // Total USD: $7.5 → EUR: 7.5 * 0.91 = 6.825
         session.ingest(makeAssistantEvent(
             model: "claude-opus-4",
             inputTokens: 1_000_000,
@@ -138,7 +140,7 @@ final class MetricsTests: XCTestCase {
 
         let snap = session.snapshot(at: baseDate.addingTimeInterval(10))
 
-        XCTAssertEqual(snap.costEUR, 20.7, accuracy: 0.1,
-                       "Expected ~EUR 20.7, got \(snap.costEUR)")
+        XCTAssertEqual(snap.costEUR, 6.825, accuracy: 0.1,
+                       "Expected ~EUR 6.825, got \(snap.costEUR)")
     }
 }

@@ -26,30 +26,34 @@ enum InkPulseDefaults {
     static let shortWindowSeconds: Int = 60
     static let longWindowSeconds: Int = 300
 
-    // MARK: - Health Thresholds
+    // MARK: - Context Limits
 
-    /// Each threshold is (green, yellow) — anything above yellow is red.
-    enum HealthThreshold {
-        static let costPerMinuteEUR: (green: Double, yellow: Double) = (0.10, 0.30)
-        static let tokensPerSecond: (green: Double, yellow: Double) = (50.0, 200.0)
-        static let cacheHitRate: (green: Double, yellow: Double) = (0.60, 0.30)
-        static let errorRate: (green: Double, yellow: Double) = (0.02, 0.10)
-        static let sessionDurationMinutes: (green: Double, yellow: Double) = (30.0, 90.0)
-        static let toolCallRate: (green: Double, yellow: Double) = (5.0, 15.0)
-        static let modelMixOpusPercent: (green: Double, yellow: Double) = (0.30, 0.60)
-        static let idlePercent: (green: Double, yellow: Double) = (0.20, 0.50)
-    }
+    static let defaultContextLimits: [String: Int] = [
+        "claude-opus-4": 200_000,
+        "claude-opus-4-6[1m]": 1_000_000,
+        "claude-sonnet-4": 200_000,
+        "claude-sonnet-4-6": 200_000,
+        "claude-haiku-4-5": 200_000,
+        "claude-haiku-3.5": 200_000,
+    ]
+
+    static let fallbackContextLimit: Int = 200_000
+
+    // MARK: - Budget
+
+    static let defaultDailyBudgetEUR: Double = 0  // 0 = disabled
+    static let defaultBudgetAlertThresholds: [Double] = [0.8, 1.0]
 
     // MARK: - Default Metric Weights
 
     static let defaultWeights: [String: Double] = [
-        "cost_per_minute": 0.20,
-        "tokens_per_second": 0.10,
-        "cache_hit_rate": 0.15,
-        "error_rate": 0.15,
-        "session_duration": 0.10,
-        "tool_call_rate": 0.10,
-        "model_mix_opus_percent": 0.10,
-        "idle_percent": 0.10,
+        "costEUR":           0.10,
+        "tokenMin":          0.15,
+        "cacheHit":          0.15,
+        "errorRate":         0.20,
+        "thinkOutputRatio":  0.10,
+        "toolFreq":          0.10,
+        "subagentCount":     0.10,
+        "idleAvgS":          0.10,
     ]
 }

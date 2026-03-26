@@ -4,7 +4,7 @@
 
 CodexBar tells you how much you spent. InkPulse tells you the **rhythm**.
 
-![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue) ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange) ![License MIT](https://img.shields.io/badge/license-MIT-green) ![Tests 20/20](https://img.shields.io/badge/tests-20%2F20-brightgreen)
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue) ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange) ![License MIT](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/mattiacalastri/InkPulse/actions/workflows/ci.yml/badge.svg)
 
 <p align="center">
   <img src="docs/images/inkpulse-dashboard.png" alt="InkPulse Dashboard" width="380">

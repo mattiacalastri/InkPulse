@@ -6,6 +6,7 @@ struct HeartbeatRecord: Codable {
     let ts: String
     let sessionId: String
     let project: String?
+    let pillar: String?
     let health: Int
     let tokenMin: Double
     let toolFreq: Double
@@ -17,11 +18,14 @@ struct HeartbeatRecord: Codable {
     let costEur: Double
     let model: String
     let anomaly: String?
+    let lastToolName: String?
+    let contextPercent: Double?
 
     enum CodingKeys: String, CodingKey {
         case ts
         case sessionId = "session_id"
         case project
+        case pillar
         case health
         case tokenMin = "token_min"
         case toolFreq = "tool_freq"
@@ -33,15 +37,18 @@ struct HeartbeatRecord: Codable {
         case costEur = "cost_eur"
         case model
         case anomaly
+        case lastToolName = "last_tool_name"
+        case contextPercent = "context_percent"
     }
 
-    init(from snap: MetricsSnapshot) {
+    init(from snap: MetricsSnapshot, cwd: String? = nil) {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
         self.ts = formatter.string(from: snap.lastEventTime)
         self.sessionId = snap.sessionId
         self.project = nil
+        self.pillar = PillarInfo.from(cwd: cwd, inferredProject: snap.inferredProject).name
         self.health = snap.health
         self.tokenMin = snap.tokenMin
         self.toolFreq = snap.toolFreq
@@ -53,6 +60,8 @@ struct HeartbeatRecord: Codable {
         self.costEur = snap.costEUR
         self.model = snap.model
         self.anomaly = snap.anomaly
+        self.lastToolName = snap.lastToolName
+        self.contextPercent = snap.contextPercent > 0 ? snap.contextPercent : nil
     }
 }
 
@@ -85,7 +94,7 @@ final class HeartbeatLogger {
 
     // MARK: - Log
 
-    func logSnapshots(_ snapshots: [MetricsSnapshot]) {
+    func logSnapshots(_ snapshots: [MetricsSnapshot], cwds: [String: String] = [:]) {
         guard !snapshots.isEmpty else { return }
 
         let dateStr = Self.fileDateFormatter.string(from: Date())
@@ -93,7 +102,7 @@ final class HeartbeatLogger {
 
         var lines = Data()
         for snap in snapshots {
-            let record = HeartbeatRecord(from: snap)
+            let record = HeartbeatRecord(from: snap, cwd: cwds[snap.sessionId])
             guard let jsonData = try? encoder.encode(record) else { continue }
             lines.append(jsonData)
             lines.append(Data("\n".utf8))

@@ -9,6 +9,7 @@ final class SessionWatcher {
     private var tailers: [String: FileTailer] = [:]  // keyed by file path
     private var timer: Timer?
     private(set) var sessionCwds: [String: String] = [:]  // sessionId → cwd
+    private(set) var sessionBranches: [String: String] = [:]  // sessionId → gitBranch
 
     init(projectsDir: URL, onNewEvents: @escaping ([ClaudeEvent]) -> Void) {
         self.projectsDir = projectsDir
@@ -34,23 +35,52 @@ final class SessionWatcher {
     // MARK: - Offset Restore
 
     func restoreOffsets(_ offsets: [String: OffsetEntry]) {
+        let fm = FileManager.default
         for (key, entry) in offsets {
             let url = URL(fileURLWithPath: entry.file)
-            if FileManager.default.fileExists(atPath: url.path) {
+            guard fm.fileExists(atPath: url.path) else { continue }
+
+            let attrs = try? fm.attributesOfItem(atPath: url.path)
+            let currentMtime = attrs?[.modificationDate] as? Date
+            let currentSize = attrs?[.size] as? UInt64 ?? 0
+
+            // Skip unchanged files (same mtime + size = no new data)
+            if let savedMtime = entry.mtime, let savedSize = entry.fileSize,
+               let mtime = currentMtime, mtime == savedMtime, currentSize == savedSize {
+                AppState.log("Skip unchanged: \(url.lastPathComponent) (mtime match)")
                 tailers[key] = FileTailer(fileURL: url, offset: entry.offset)
+                continue
             }
+
+            // File grew: resume from saved offset
+            if let savedSize = entry.fileSize, currentSize > savedSize {
+                AppState.log("Resume grown: \(url.lastPathComponent) (\(savedSize)→\(currentSize))")
+                tailers[key] = FileTailer(fileURL: url, offset: entry.offset)
+                continue
+            }
+
+            // File changed (shrank or different): rescan tail
+            let tailOffset = currentSize > 500_000 ? currentSize - 500_000 : 0
+            AppState.log("Rescan: \(url.lastPathComponent) (changed)")
+            tailers[key] = FileTailer(fileURL: url, offset: tailOffset)
         }
     }
 
     // MARK: - Current Offsets
 
     var currentOffsets: [String: OffsetEntry] {
+        let fm = FileManager.default
         var result: [String: OffsetEntry] = [:]
         for (key, tailer) in tailers {
+            let attrs = try? fm.attributesOfItem(atPath: tailer.fileURL.path)
+            let mtime = attrs?[.modificationDate] as? Date
+            let size = attrs?[.size] as? UInt64
             result[key] = OffsetEntry(
                 file: tailer.fileURL.path,
                 offset: tailer.offset,
-                lastTs: nil
+                lastTs: nil,
+                mtime: mtime,
+                fileSize: size
             )
         }
         return result
@@ -121,6 +151,15 @@ final class SessionWatcher {
                         let sid = String(line[sidRange.upperBound..<sidEnd.lowerBound])
                         if sessionCwds[sid] == nil {
                             sessionCwds[sid] = cwd
+                        }
+                        // Extract gitBranch
+                        if sessionBranches[sid] == nil,
+                           let brRange = line.range(of: "\"gitBranch\":\""),
+                           let brEnd = line[brRange.upperBound...].range(of: "\"") {
+                            let branch = String(line[brRange.upperBound..<brEnd.lowerBound])
+                            if !branch.isEmpty && branch != "HEAD" {
+                                sessionBranches[sid] = branch
+                            }
                         }
                     }
                 }

@@ -1,0 +1,104 @@
+import Foundation
+import AppKit
+
+final class AnomalyWatcher {
+
+    private let notificationManager: NotificationManager
+
+    static let criticalAnomalies: Set<Anomaly> = [.hemorrhage, .explosion, .loop]
+
+    private var previousState: [String: Anomaly] = [:]
+    private var cooldowns: [String: Date] = [:]
+    private var lastGlobalNotification: Date = .distantPast
+
+    private let perSessionCooldown: TimeInterval = 300   // 5 minutes
+    private let globalCooldown: TimeInterval = 30        // 30 seconds
+
+    init(notificationManager: NotificationManager) {
+        self.notificationManager = notificationManager
+    }
+
+    // MARK: - Check
+
+    func check(sessions: [String: MetricsSnapshot], sessionCwds: [String: String]) {
+        let now = Date()
+
+        for (sessionId, snapshot) in sessions {
+            let currentAnomaly: Anomaly? = snapshot.anomaly.flatMap { Anomaly(rawValue: $0) }
+            let previousAnomaly: Anomaly? = previousState[sessionId]
+
+            if let anomaly = currentAnomaly,
+               Self.criticalAnomalies.contains(anomaly),
+               previousAnomaly == nil {
+
+                let cooldownKey = "\(sessionId):\(anomaly.rawValue)"
+
+                if let expiry = cooldowns[cooldownKey], now < expiry {
+                    previousState[sessionId] = currentAnomaly
+                    continue
+                }
+
+                if now.timeIntervalSince(lastGlobalNotification) < globalCooldown {
+                    previousState[sessionId] = currentAnomaly
+                    continue
+                }
+
+                let project = projectName(
+                    from: sessionId,
+                    filePath: nil,
+                    cwd: sessionCwds[sessionId],
+                    inferredProject: snapshot.inferredProject
+                )
+
+                notificationManager.send(
+                    title: anomaly.notificationTitle,
+                    body: anomaly.notificationBody(project: project, snapshot: snapshot)
+                )
+
+                // Feature 5: Sound on anomaly
+                if ConfigLoader.load().soundOnAnomaly {
+                    NSSound(named: "Funk")?.play()
+                }
+
+                cooldowns[cooldownKey] = now.addingTimeInterval(perSessionCooldown)
+                lastGlobalNotification = now
+            }
+
+            previousState[sessionId] = currentAnomaly
+        }
+
+        // Health-based alert: notify when any session drops below 50
+        for (sessionId, snapshot) in sessions {
+            if snapshot.health < 50 {
+                let healthKey = "\(sessionId):low_health"
+                if let expiry = cooldowns[healthKey], now < expiry { continue }
+                if now.timeIntervalSince(lastGlobalNotification) < globalCooldown { continue }
+
+                let project = projectName(
+                    from: sessionId,
+                    filePath: nil,
+                    cwd: sessionCwds[sessionId],
+                    inferredProject: snapshot.inferredProject
+                )
+
+                notificationManager.send(
+                    title: "Health Critical",
+                    body: "\(project) health dropped to \(snapshot.health) — investigate"
+                )
+
+                if ConfigLoader.load().soundOnAnomaly {
+                    NSSound(named: "Funk")?.play()
+                }
+
+                cooldowns[healthKey] = now.addingTimeInterval(perSessionCooldown)
+                lastGlobalNotification = now
+            }
+        }
+
+        // Clean up stale entries
+        let activeIds = Set(sessions.keys)
+        for id in previousState.keys where !activeIds.contains(id) {
+            previousState.removeValue(forKey: id)
+        }
+    }
+}

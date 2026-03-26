@@ -2,6 +2,22 @@ import Foundation
 
 enum JSONLParser {
 
+    /// Maps toolUseID → toolName, populated from assistant events, consumed by progress events.
+    private static let registryLock = NSLock()
+    private static var _toolNameRegistry: [String: String] = [:]
+
+    private static func registrySet(_ key: String, _ value: String) {
+        registryLock.lock()
+        defer { registryLock.unlock() }
+        _toolNameRegistry[key] = value
+    }
+
+    private static func registryGet(_ key: String) -> String? {
+        registryLock.lock()
+        defer { registryLock.unlock() }
+        return _toolNameRegistry[key]
+    }
+
     // MARK: - Public
 
     /// Parse a single JSONL line into a typed ClaudeEvent.
@@ -23,7 +39,7 @@ enum JSONLParser {
         case "progress":
             return parseProgress(root, timestamp: timestamp, sessionId: sessionId)
         case "user":
-            return .user(timestamp: timestamp, sessionId: sessionId)
+            return parseUser(root, timestamp: timestamp, sessionId: sessionId)
         case "system":
             return .system(timestamp: timestamp, sessionId: sessionId)
         case "queue-operation":
@@ -86,6 +102,7 @@ enum JSONLParser {
         // Content blocks
         var thinkingText: String?
         var outputText: String?
+        var toolUses: [ToolUseInfo] = []
 
         if let contentBlocks = message["content"] as? [[String: Any]] {
             for block in contentBlocks {
@@ -94,6 +111,20 @@ enum JSONLParser {
                     thinkingText = text
                 } else if blockType == "text", let text = block["text"] as? String {
                     outputText = text
+                } else if blockType == "tool_use",
+                          let toolId = block["id"] as? String,
+                          let toolName = block["name"] as? String {
+                    let input = block["input"] as? [String: Any]
+                    let target = extractToolTarget(from: input, toolName: toolName)
+                    let fullPath = extractFullPath(from: input)
+                    let subject: String?
+                    if toolName == "TaskCreate" || toolName == "TaskUpdate" {
+                        subject = input?["subject"] as? String
+                    } else {
+                        subject = nil
+                    }
+                    toolUses.append(ToolUseInfo(id: toolId, name: toolName, target: target, fullPath: fullPath, subject: subject))
+                    registrySet(toolId, toolName)
                 }
             }
         }
@@ -103,9 +134,90 @@ enum JSONLParser {
             usage: usage,
             thinkingText: thinkingText,
             outputText: outputText,
-            requestId: requestId
+            requestId: requestId,
+            toolUses: toolUses
         )
         return .assistant(msg, timestamp: timestamp, sessionId: sessionId)
+    }
+
+    // MARK: - Full Path Extraction (for project inference)
+
+    /// Extracts the raw file_path from tool_use input without truncation.
+    private static func extractFullPath(from input: [String: Any]?) -> String? {
+        guard let input = input,
+              let fp = input["file_path"] as? String,
+              fp.contains("/") else { return nil }
+        return fp
+    }
+
+    // MARK: - Tool Target Extraction
+
+    /// Extracts the first meaningful argument from tool_use input. Truncated to 30 chars.
+    private static func extractToolTarget(from input: [String: Any]?, toolName: String) -> String? {
+        guard let input = input else { return nil }
+
+        // Priority: file_path → command → pattern → first string value
+        let keys = ["file_path", "command", "pattern", "query", "url"]
+        for key in keys {
+            if let value = input[key] as? String, !value.isEmpty {
+                return truncateTarget(value)
+            }
+        }
+
+        // Fallback: first string value that is not too long
+        for (_, value) in input {
+            if let str = value as? String, !str.isEmpty, str.count < 200 {
+                return truncateTarget(str)
+            }
+        }
+
+        return nil
+    }
+
+    private static func truncateTarget(_ value: String) -> String {
+        // For file paths, take just the last component
+        if value.contains("/") {
+            let last = URL(fileURLWithPath: value).lastPathComponent
+            if last.count <= 30 { return last }
+            return String(last.prefix(30))
+        }
+        if value.count <= 30 { return value }
+        return String(value.prefix(30))
+    }
+
+    // MARK: - User (tool_result errors)
+
+    private static func parseUser(_ root: [String: Any], timestamp: Date, sessionId: String) -> ClaudeEvent {
+        var errorCount = 0
+
+        // user events contain tool_result blocks with is_error flag
+        let message = decodeMessage(root["message"]) ?? [:]
+        if let contentBlocks = message["content"] as? [[String: Any]] {
+            for block in contentBlocks {
+                if block["type"] as? String == "tool_result",
+                   let isError = block["is_error"] as? Bool,
+                   isError {
+                    errorCount += 1
+                }
+            }
+        }
+
+        // Also check for error keywords in data field (progress-style user events)
+        if let data = root["data"] as? String {
+            let dataMsg = decodeMessage(data)
+            if let innerMsg = dataMsg?["message"] as? [String: Any],
+               let content = innerMsg["content"] as? [[String: Any]] {
+                for block in content {
+                    if block["type"] as? String == "tool_result",
+                       let isError = block["is_error"] as? Bool,
+                       isError {
+                        errorCount += 1
+                    }
+                }
+            }
+        }
+
+        return .user(errorCount: errorCount, timestamp: timestamp, sessionId: sessionId)
     }
 
     // MARK: - Progress
@@ -123,8 +235,17 @@ enum JSONLParser {
             || lowered.contains("blocked")
             || lowered.contains("failed")
 
+        // Resolve tool name from registry
+        let toolName: String?
+        if let id = toolUseID {
+            toolName = registryGet(id)
+        } else {
+            toolName = nil
+        }
+
         return .progress(
             toolUseID: toolUseID,
+            toolName: toolName,
             isToolUse: isToolUse,
             isError: isError,
             timestamp: timestamp,

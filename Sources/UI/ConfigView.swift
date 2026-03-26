@@ -7,6 +7,8 @@ struct ConfigView: View {
     @AppStorage("inkpulse_heartbeat_s") private var heartbeatS: Double = 5.0
     @AppStorage("inkpulse_timeout_min") private var timeoutMin: Double = 5.0
     @AppStorage("inkpulse_tail_kb") private var tailKB: Double = 500.0
+    @AppStorage("inkpulse_daily_budget") private var dailyBudget: Double = 0.0
+    @AppStorage("inkpulse_sound_anomaly") private var soundOnAnomaly: Bool = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -72,6 +74,31 @@ struct ConfigView: View {
 
                     Divider().padding(.vertical, 4)
 
+                    // ── BUDGET & ALERTS ──
+                    sectionHeader("Budget & Alerts")
+
+                    configRow(
+                        icon: "eurosign.circle.fill",
+                        title: "Daily Budget",
+                        subtitle: dailyBudget > 0 ? String(format: "€%.0f", dailyBudget) : "Disabled"
+                    ) {
+                        Slider(value: $dailyBudget, in: 0...50, step: 1)
+                            .frame(width: 100)
+                    }
+
+                    configRow(
+                        icon: "speaker.wave.2.fill",
+                        title: "Sound on Anomaly",
+                        subtitle: soundOnAnomaly ? "On" : "Off"
+                    ) {
+                        Toggle("", isOn: $soundOnAnomaly)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                    }
+
+                    Divider().padding(.vertical, 4)
+
                     // ── INFO ──
                     sectionHeader("About")
 
@@ -79,7 +106,7 @@ struct ConfigView: View {
                         Text("🐙")
                             .font(.title)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("InkPulse v0.1.0")
+                            Text("InkPulse v1.2.0")
                                 .font(.system(.caption, design: .rounded))
                                 .fontWeight(.bold)
                             Text("Heartbeat Monitor for Claude Code")
@@ -115,7 +142,7 @@ struct ConfigView: View {
                 .padding(.horizontal, 12).padding(.vertical, 10)
             }
         }
-        .frame(width: 340)
+        .frame(width: 560)
     }
 
     // MARK: - Components

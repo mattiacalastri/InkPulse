@@ -27,146 +27,187 @@ func healthColor(for score: Int) -> Color {
     }
 }
 
+// MARK: - Context Color Helper
+
+func contextColor(for percent: Double) -> Color {
+    if percent < 0.60 {
+        return Color(hex: "#00d4aa")
+    } else if percent < 0.85 {
+        return Color(hex: "#FFA500")
+    } else {
+        return Color(hex: "#FF4444")
+    }
+}
+
 // MARK: - Agent Mood
 
-/// Derives an emoji mood from the snapshot metrics. Pure function, no new state.
-func agentMood(for snap: MetricsSnapshot) -> (emoji: String, status: String) {
+/// Derives a mood indicator from the snapshot metrics.
+/// Returns a unicode glyph, status label, and semantic color.
+func agentMood(for snap: MetricsSnapshot) -> (emoji: String, status: String, color: Color) {
     let idle = Date().timeIntervalSince(snap.lastEventTime)
+
+    let red = Color(hex: "#FF4444")
+    let orange = Color(hex: "#FFA500")
+    let teal = Color(hex: "#00d4aa")
+    let blue = Color(hex: "#4A9EFF")
+    let dim = Color.white.opacity(0.3)
 
     // Sleeping — no events for >2 min
     if idle > 120 {
-        return ("😴", "sleeping")
+        return ("○", "sleeping", dim)
     }
 
     // Stalled — idle >30s
     if idle > 30 || snap.idleAvgS > 30 {
-        return ("🧊", "stalled")
+        return ("■", "stalled", orange)
     }
 
     // Anomaly states
     if let anomaly = snap.anomaly {
         switch anomaly {
-        case "loop": return ("🔄", "looping")
-        case "stall": return ("🧊", "stalled")
-        case "hemorrhage": return ("💸", "burning tokens")
-        case "explosion": return ("🐙", "spawning \(snap.subagentCount) agents")
-        case "deep_thinking": return ("🧠", "thinking deeply")
+        case "loop": return ("⟳", "looping", red)
+        case "stall": return ("■", "stalled", orange)
+        case "hemorrhage": return ("▼", "hemorrhage", red)
+        case "explosion": return ("◆", "spawning \(snap.subagentCount) agents", orange)
+        case "deep_thinking": return ("◇", "deep thinking", blue)
         default: break
         }
     }
 
     // Spawning many agents
     if snap.subagentCount > 3 {
-        return ("🐙", "orchestrating \(snap.subagentCount) agents")
+        return ("◆", "orchestrating \(snap.subagentCount) agents", teal)
     }
 
     // High speed
     if snap.tokenMin > 800 && snap.errorRate < 0.05 {
-        return ("⚡", "forging fast")
+        return ("●", "forging", teal)
     }
 
     // High cache efficiency
     if snap.cacheHit > 0.95 {
-        return ("🦊", "efficient")
+        return ("●", "efficient", teal)
     }
 
     // Struggling
     if snap.errorRate > 0.10 {
-        return ("😤", "struggling")
+        return ("▲", "struggling", orange)
     }
 
     // Normal active
     if snap.tokenMin > 200 {
-        return ("🔥", "working")
+        return ("●", "active", teal)
     }
 
     // Low activity
-    return ("💭", "idle")
+    return ("○", "idle", dim)
 }
 
-// MARK: - Project Name
+// MARK: - Pillar Identity
 
-/// Derives a readable name from the cwd (working directory) or file path.
-/// Priority: cwd last component → file path project dir → sessionId prefix
-func projectName(from sessionId: String, filePath: String?, cwd: String?) -> String {
-    // Best: use cwd last path component
-    if let cwd = cwd {
-        let last = URL(fileURLWithPath: cwd).lastPathComponent
-        // Map home dir to "Home"
-        if last == NSUserName() || cwd == FileManager.default.homeDirectoryForCurrentUser.path {
-            return "Home"
+/// Maps a working directory to a strategic pillar with name, color, and emoji.
+struct PillarInfo {
+    let name: String
+    let color: Color
+    let shortName: String
+
+    static let home = PillarInfo(name: "Home", color: Color(hex: "#4A9EFF"), shortName: "~")
+
+    private static let knownPillars: [(pathContains: String, info: PillarInfo)] = [
+        ("btc_predictions",     PillarInfo(name: "BTC Bot",    color: Color(hex: "#00d4aa"), shortName: "BT")),
+        ("projects/aurahome",   PillarInfo(name: "AuraHome",   color: Color(hex: "#FFD700"), shortName: "AH")),
+        ("Astra Digital",       PillarInfo(name: "Astra",      color: Color(hex: "#4A9EFF"), shortName: "AD")),
+        ("claude_voice",        PillarInfo(name: "Astra OS",   color: Color(hex: "#A855F7"), shortName: "OS")),
+        ("projects/InkPulse",   PillarInfo(name: "InkPulse",   color: Color(hex: "#00d4aa"), shortName: "IP")),
+    ]
+
+    /// Derives project identity from the working directory path.
+    /// Checks config overrides first, then known pillars, then inferred project from tool paths,
+    /// then falls back to last path component.
+    static func from(cwd: String?, inferredProject: String? = nil) -> PillarInfo {
+        guard let cwd = cwd else { return .home }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let isHome = cwd == home || URL(fileURLWithPath: cwd).lastPathComponent == NSUserName()
+
+        // Config overrides first (even for Home, in case user mapped a known path)
+        let config = ConfigLoader.load()
+        for (pathKey, override) in config.pillarOverrides {
+            if cwd.contains(pathKey) {
+                return PillarInfo(
+                    name: override.name,
+                    color: Color(hex: override.color),
+                    shortName: override.short
+                )
+            }
         }
-        return last
+
+        // Known pillars
+        for pillar in knownPillars {
+            if cwd.contains(pillar.pathContains) {
+                return pillar.info
+            }
+        }
+
+        // Project inference from tool paths (when cwd is Home)
+        if isHome, let project = inferredProject, !project.isEmpty {
+            let short = String(project.prefix(2).uppercased())
+            return PillarInfo(name: project, color: Color(hex: "#4A9EFF"), shortName: short)
+        }
+
+        if isHome { return .home }
+
+        // Fallback: last path component capitalized
+        let last = URL(fileURLWithPath: cwd).lastPathComponent
+        let capitalized = last.prefix(1).uppercased() + last.dropFirst()
+        return PillarInfo(name: capitalized, color: Color(hex: "#4A9EFF"), shortName: String(last.prefix(2).uppercased()))
     }
 
-    // Fallback: derive from file path
-    guard let path = filePath else {
-        return String(sessionId.prefix(8))
+    /// Pillar name for persistence (HeartbeatRecord).
+    static func pillarName(from cwd: String?) -> String {
+        return from(cwd: cwd).name
     }
+}
+
+// MARK: - Project Name (uses PillarInfo)
+
+func projectName(from sessionId: String, filePath: String?, cwd: String?, inferredProject: String? = nil) -> String {
+    if cwd != nil { return PillarInfo.from(cwd: cwd, inferredProject: inferredProject).name }
+    guard let path = filePath else { return String(sessionId.prefix(8)) }
     let components = path.components(separatedBy: "/")
     if let idx = components.firstIndex(of: "projects"), idx + 1 < components.count {
         let projectDir = components[idx + 1]
         let parts = projectDir.components(separatedBy: "-")
-        if parts.count > 3 {
-            return Array(parts.dropFirst(3)).joined(separator: "-")
-        } else {
-            return "Home"
-        }
+        if parts.count > 3 { return Array(parts.dropFirst(3)).joined(separator: "-") }
+        return "Home"
     }
     return String(sessionId.prefix(8))
 }
 
-// MARK: - SessionRowView
+// MARK: - Model Badge Helpers
 
-struct SessionRowView: View {
-    let snapshot: MetricsSnapshot
-    let filePath: String?
-    let cwd: String?
-
-    var body: some View {
-        let mood = agentMood(for: snapshot)
-        let name = projectName(from: snapshot.sessionId, filePath: filePath, cwd: cwd)
-
-        HStack(spacing: 8) {
-            // Emoji mood
-            Text(mood.emoji)
-                .font(.title3)
-
-            // Name + status
-            VStack(alignment: .leading, spacing: 1) {
-                Text(name)
-                    .font(.system(.caption, design: .rounded))
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-
-                Text(mood.status)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            // Health bar + score
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(snapshot.health)")
-                    .font(.system(.caption, design: .monospaced))
-                    .fontWeight(.bold)
-                    .foregroundStyle(healthColor(for: snapshot.health))
-
-                // Mini health bar
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(Color.gray.opacity(0.2))
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(healthColor(for: snapshot.health))
-                            .frame(width: geo.size.width * CGFloat(max(0, min(snapshot.health, 100))) / 100.0)
-                    }
-                }
-                .frame(width: 50, height: 4)
-            }
-        }
-        .padding(.vertical, 3)
-    }
+func modelShortName(_ model: String) -> String {
+    let lower = model.lowercased()
+    if lower.contains("opus") { return "opus" }
+    if lower.contains("sonnet") { return "sonnet" }
+    if lower.contains("haiku") { return "haiku" }
+    // Fallback: first word, max 8 chars
+    return String(model.split(separator: "-").first ?? Substring(model)).prefix(8).lowercased()
 }
+
+func modelColor(_ model: String) -> Color {
+    let lower = model.lowercased()
+    if lower.contains("opus") { return Color(hex: "#00d4aa") }
+    if lower.contains("sonnet") { return Color(hex: "#4A9EFF") }
+    if lower.contains("haiku") { return Color(hex: "#8E8E93") }
+    return Color(hex: "#FFA500")
+}
+
+func formatUptime(_ start: Date) -> String {
+    let seconds = Int(Date().timeIntervalSince(start))
+    if seconds < 60 { return "\(seconds)s" }
+    let minutes = seconds / 60
+    if minutes < 60 { return "\(minutes)m" }
+    let hours = minutes / 60
+    return "\(hours)h \(minutes % 60)m"
+}
+

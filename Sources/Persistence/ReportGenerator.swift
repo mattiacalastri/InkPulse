@@ -188,8 +188,7 @@ enum ReportGenerator {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>InkPulse Report</title>
-            <!-- TODO: Bundle Chart.js locally for offline use -->
-            <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+            <script>\(Self.chartJsSource())</script>
             <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 body {
@@ -457,5 +456,32 @@ enum ReportGenerator {
         </body>
         </html>
         """
+    }
+
+    // MARK: - Chart.js Loader
+
+    /// Reads the bundled chart.min.js from Resources/ directory.
+    /// Falls back to an empty string if the file is missing.
+    private static func chartJsSource() -> String {
+        // Resolve path relative to the binary's bundle or the repo Resources/ dir
+        let candidates: [URL] = [
+            Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/chart.min.js"),
+            Bundle.main.bundleURL
+                .deletingLastPathComponent()
+                .appendingPathComponent("Resources/chart.min.js"),
+            // Development fallback: repo root Resources/
+            URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent() // Persistence/
+                .deletingLastPathComponent() // Sources/
+                .deletingLastPathComponent() // project root
+                .appendingPathComponent("Resources/chart.min.js"),
+        ]
+        for url in candidates {
+            if let source = try? String(contentsOf: url, encoding: .utf8) {
+                return source
+            }
+        }
+        print("[InkPulse] chart.min.js not found — charts will not render in report.")
+        return ""
     }
 }

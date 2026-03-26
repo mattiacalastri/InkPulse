@@ -19,9 +19,15 @@ final class SessionMetrics {
     /// Gaps > 1 s between consecutive events (timestamped by the later event).
     private var idleGaps: [(date: Date, gap: Double)] = []
 
-    /// Queue operations for subagent tracking.
-    private var enqueueCount: Int = 0
-    private var completeCount: Int = 0
+    /// Timestamped tool names for diversity/domain tracking (EGI).
+    private var toolNameEvents: [(date: Date, name: String)] = []
+
+    /// EGI state tracker.
+    private(set) var egiTracker = EGITracker()
+
+    /// Subagent tracking via Agent tool uses (not queue-operations).
+    /// queue-operations are user messages queued while Claude is busy, NOT subagents.
+    private var agentToolSpawnCount: Int = 0
 
     /// Cumulative cache counters.
     private var totalInput: Int = 0
@@ -38,6 +44,26 @@ final class SessionMetrics {
 
     /// Previous event timestamp for idle-gap detection.
     private var previousTimestamp: Date?
+
+    // MARK: - Context Window (Feature 1)
+
+    /// Total context tokens from the last assistant event usage.
+    private(set) var lastContextTokens: Int = 0
+
+    // MARK: - Last Tool + Task Name (Feature 2)
+
+    /// Name of the last tool invoked (e.g. "Edit", "Bash", "Read").
+    private(set) var lastToolName: String?
+    /// First argument of the last tool (e.g. file_path, command). Truncated to 30 chars.
+    private(set) var lastToolTarget: String?
+    /// Active task name from TaskCreate/TaskUpdate progress events.
+    private(set) var activeTaskName: String?
+
+    // MARK: - Project Inference (from tool file paths)
+
+    /// Ring buffer of recent full file paths from tool_use events (max 30).
+    private var recentToolPaths: [String] = []
+    private static let maxToolPaths = 30
 
     // MARK: - Init
 
@@ -69,6 +95,38 @@ final class SessionMetrics {
             // Output tokens for tok/min window
             outputTokenEvents.append((date: timestamp, tokens: msg.usage.outputTokens))
 
+            // Context window tokens (Feature 1)
+            lastContextTokens = msg.usage.inputTokens
+                + msg.usage.cacheReadInputTokens
+                + msg.usage.cacheCreationInputTokens
+
+            // Last tool name + target from tool_use content blocks (Feature 2)
+            if let lastTool = msg.toolUses.last {
+                lastToolName = lastTool.name
+                lastToolTarget = lastTool.target
+            }
+
+            // Collect full paths for project inference
+            for tool in msg.toolUses {
+                if let fp = tool.fullPath {
+                    recentToolPaths.append(fp)
+                    if recentToolPaths.count > Self.maxToolPaths {
+                        recentToolPaths.removeFirst()
+                    }
+                }
+            }
+
+            // Task name tracking + subagent counting
+            for tool in msg.toolUses {
+                if (tool.name == "TaskCreate" || tool.name == "TaskUpdate"),
+                   let subject = tool.subject {
+                    activeTaskName = subject
+                }
+                if tool.name == "Agent" {
+                    agentToolSpawnCount += 1
+                }
+            }
+
             // Thinking / output estimation
             if let thinkText = msg.thinkingText, !thinkText.isEmpty {
                 // Rough estimate: 4 chars per token
@@ -86,32 +144,106 @@ final class SessionMetrics {
             totalCacheRead += msg.usage.cacheReadInputTokens
             totalCacheCreation += msg.usage.cacheCreationInputTokens
 
-            // Cost
+            // Cost (with tiered pricing for Sonnet >200K)
             if let c = Pricing.costEUR(
                 model: msg.model,
                 inputTokens: msg.usage.inputTokens,
                 outputTokens: msg.usage.outputTokens,
                 cacheReadTokens: msg.usage.cacheReadInputTokens,
-                cacheCreationTokens: msg.usage.cacheCreationInputTokens
+                cacheCreationTokens: msg.usage.cacheCreationInputTokens,
+                contextTokens: lastContextTokens
             ) {
                 costEUR += c
             }
 
-        case .progress(_, let isToolUse, let isError, let timestamp, _):
+        case .progress(_, let toolName, let isToolUse, let isError, let timestamp, _):
             if isToolUse {
                 toolEvents.append((date: timestamp, isError: isError))
+                if let name = toolName {
+                    toolNameEvents.append((date: timestamp, name: name))
+                    lastToolName = name
+                }
             }
 
-        case .queueOperation(let operation, _, _):
-            if operation == "enqueue" {
-                enqueueCount += 1
-            } else if operation == "complete" {
-                completeCount += 1
+        case .queueOperation:
+            // queue-operations are user messages queued while Claude is busy.
+            // They are NOT subagent spawns — ignore for subagent tracking.
+            break
+
+        case .user(let errorCount, let timestamp, _):
+            // Tool result errors from user events
+            if errorCount > 0 {
+                for _ in 0..<errorCount {
+                    toolEvents.append((date: timestamp, isError: true))
+                }
             }
 
-        case .user, .system, .unknown:
+        case .system, .unknown:
             break
         }
+    }
+
+    // MARK: - Project Inference
+
+    /// Infers project name from the most frequent directory in collected tool paths.
+    /// Returns nil if no meaningful project can be determined.
+    var inferredProject: String? {
+        guard !recentToolPaths.isEmpty else { return nil }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+
+        // Directories that are structural containers, not project names
+        let containers: Set<String> = [
+            "Downloads", "projects", "Documents", "Desktop",
+            "Library", ".claude", "Applications", "tmp",
+            "clients", "src", "public", "assets"
+        ]
+
+        var candidates: [String: Int] = [:]
+
+        for path in recentToolPaths {
+            // Strip home prefix
+            var relative = path
+            if relative.hasPrefix(home) {
+                relative = String(relative.dropFirst(home.count))
+                if relative.hasPrefix("/") { relative = String(relative.dropFirst()) }
+            }
+
+            // Walk components, skip containers, take first meaningful one
+            let components = relative.components(separatedBy: "/")
+            var found: String? = nil
+            for component in components {
+                if component.isEmpty || component.hasPrefix(".") { continue }
+                if containers.contains(component) { continue }
+                found = component
+                break
+            }
+
+            if let project = found {
+                candidates[project, default: 0] += 1
+            }
+        }
+
+        // Winner = most frequent
+        guard let winner = candidates.max(by: { $0.value < $1.value })?.key else { return nil }
+        return Self.smartCapitalize(winner)
+    }
+
+    /// Smart capitalize: "luxguard" → "Luxguard", "my-project" → "My Project".
+    /// Leaves already-capitalized names unchanged.
+    static func smartCapitalize(_ name: String) -> String {
+        if name.isEmpty { return name }
+        if name.first?.isUppercase == true { return name }
+        if name.contains("-") {
+            return name.split(separator: "-")
+                .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+                .joined(separator: " ")
+        }
+        if name.contains("_") {
+            return name.split(separator: "_")
+                .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+                .joined(separator: " ")
+        }
+        return name.prefix(1).uppercased() + name.dropFirst()
     }
 
     // MARK: - Snapshot
@@ -170,8 +302,8 @@ final class SessionMetrics {
             cacheHit = Double(totalCacheRead) / Double(cacheDenom)
         }
 
-        // 7. subagentCount
-        let subagentCount = max(enqueueCount - completeCount, 0)
+        // 7. subagentCount (from Agent tool uses, not queue-operations)
+        let subagentCount = agentToolSpawnCount
 
         // 8. costEUR already tracked cumulatively
 
@@ -191,10 +323,42 @@ final class SessionMetrics {
             sessionDurationMinutes: sessionDurationMinutes
         )
 
+        // 9. Tool diversity & domain spread (EGI signals)
+        let recentToolNames = toolNameEvents.filter { $0.date > shortCutoff }
+        let toolDiversity = Set(recentToolNames.map(\.name)).count
+
+        let egiDomainCutoff = now.addingTimeInterval(-120) // 2min window for domains
+        let domainToolNames = toolNameEvents.filter { $0.date > egiDomainCutoff }
+        let domainSpread = Set(domainToolNames.map { EGIDomain.classify($0.name) }).count
+
+        // 10. EGI state machine evaluation
+        let egiResult = egiTracker.evaluate(
+            tokenMin: tokenMin,
+            errorRate: errorRate,
+            cacheHit: cacheHit,
+            toolDiversity: toolDiversity,
+            domainSpread: domainSpread,
+            idleAvgS: idleAvgS,
+            thinkOutputRatio: thinkOutputRatio,
+            subagentCount: subagentCount,
+            at: now
+        )
+
         // Prune old events outside long window
         outputTokenEvents.removeAll { $0.date <= longCutoff }
         toolEvents.removeAll { $0.date <= longCutoff }
         idleGaps.removeAll { $0.date <= longCutoff }
+        toolNameEvents.removeAll { $0.date <= longCutoff }
+
+        // Context window % (Feature 1)
+        let config = ConfigLoader.load()
+        let contextLimit = ConfigLoader.contextLimit(for: model, config: config)
+        let contextPercent: Double
+        if contextLimit > 0 && lastContextTokens > 0 {
+            contextPercent = Double(lastContextTokens) / Double(contextLimit)
+        } else {
+            contextPercent = 0.0
+        }
 
         return MetricsSnapshot(
             sessionId: sessionId,
@@ -210,7 +374,17 @@ final class SessionMetrics {
             health: healthResult.score,
             anomaly: healthResult.anomaly?.rawValue,
             startTime: startTime,
-            lastEventTime: lastEventTime
+            lastEventTime: lastEventTime,
+            egiState: egiResult.state,
+            egiConfidence: egiResult.confidence,
+            toolDiversity: toolDiversity,
+            domainSpread: domainSpread,
+            lastContextTokens: lastContextTokens,
+            contextPercent: contextPercent,
+            lastToolName: lastToolName,
+            lastToolTarget: lastToolTarget,
+            activeTaskName: activeTaskName,
+            inferredProject: inferredProject
         )
     }
 }

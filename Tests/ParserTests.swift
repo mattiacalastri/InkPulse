@@ -66,7 +66,7 @@ final class ParserTests: XCTestCase {
 
         let event = JSONLParser.parse(line: line)
 
-        guard case .progress(let toolId, let isToolUse, let isError, _, _) = event else {
+        guard case .progress(let toolId, _, let isToolUse, let isError, _, _) = event else {
             XCTFail("Expected .progress, got \(event)")
             return
         }
@@ -89,7 +89,7 @@ final class ParserTests: XCTestCase {
 
         let event = JSONLParser.parse(line: line)
 
-        guard case .progress(_, _, let isError, _, _) = event else {
+        guard case .progress(_, _, _, let isError, _, _) = event else {
             XCTFail("Expected .progress, got \(event)")
             return
         }
@@ -129,11 +129,12 @@ final class ParserTests: XCTestCase {
 
         let event = JSONLParser.parse(line: line)
 
-        guard case .user(let date, let sessId) = event else {
+        guard case .user(let errorCount, let date, let sessId) = event else {
             XCTFail("Expected .user, got \(event)")
             return
         }
 
+        XCTAssertEqual(errorCount, 0)
         XCTAssertNotNil(date)
         XCTAssertEqual(sessId, sid)
     }
