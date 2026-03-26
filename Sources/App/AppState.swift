@@ -8,7 +8,7 @@ final class AppState: ObservableObject {
     @Published var tokenHistory: [Double] = []
     @Published var isPaused = false
     @Published var historyStore = HistoryStore()
-        @Published var sessionFilePaths: [String: String] = [:] // sessionId → filePath
+    @Published var sessionFilePaths: [String: String] = [:] // sessionId → filePath
     @Published var sessionCwds: [String: String] = [:] // sessionId → cwd
     @Published var sessionBranches: [String: String] = [:] // sessionId → gitBranch
     @Published var quotaSnapshot: QuotaSnapshot?
@@ -215,7 +215,9 @@ final class AppState: ObservableObject {
     // MARK: - Debug Log
 
     nonisolated static func log(_ msg: String) {
-        let line = "[InkPulse \(ISO8601DateFormatter().string(from: Date()))] \(msg)\n"
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let line = "[InkPulse \(formatter.string(from: Date()))] \(msg)\n"
         let logFile = InkPulseDefaults.inkpulseDir.appendingPathComponent("debug.log")
         if let data = line.data(using: .utf8) {
             if FileManager.default.fileExists(atPath: logFile.path) {

@@ -18,6 +18,7 @@ enum Pricing {
         // Claude 4.x — standard tier (<=200K context)
         "claude-opus-4":          ModelPricing(inputPerMillion: 5.0,   outputPerMillion: 25.0,  cacheReadPerMillion: 0.50,  cacheCreatePerMillion: 6.25),
         "claude-opus-4-6":        ModelPricing(inputPerMillion: 5.0,   outputPerMillion: 25.0,  cacheReadPerMillion: 0.50,  cacheCreatePerMillion: 6.25),
+        "claude-opus-4-6[1m]":    ModelPricing(inputPerMillion: 5.0,   outputPerMillion: 25.0,  cacheReadPerMillion: 0.50,  cacheCreatePerMillion: 6.25),
         "claude-sonnet-4":        ModelPricing(inputPerMillion: 3.0,   outputPerMillion: 15.0,  cacheReadPerMillion: 0.30,  cacheCreatePerMillion: 3.75),
         "claude-sonnet-4-6":      ModelPricing(inputPerMillion: 3.0,   outputPerMillion: 15.0,  cacheReadPerMillion: 0.30,  cacheCreatePerMillion: 3.75),
         "claude-haiku-4-5":       ModelPricing(inputPerMillion: 1.0,   outputPerMillion: 5.0,   cacheReadPerMillion: 0.10,  cacheCreatePerMillion: 1.25),
