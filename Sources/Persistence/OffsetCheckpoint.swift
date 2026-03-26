@@ -4,16 +4,19 @@ enum OffsetCheckpoint {
 
     static func load() -> [String: OffsetEntry] {
         let url = InkPulseDefaults.offsetsFile
-        guard let data = try? Data(contentsOf: url),
-              let offsets = try? JSONDecoder().decode([String: OffsetEntry].self, from: data)
-        else { return [:] }
+        guard let data = try? Data(contentsOf: url) else { return [:] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        guard let offsets = try? decoder.decode([String: OffsetEntry].self, from: data) else { return [:] }
         return offsets
     }
 
     static func save(_ offsets: [String: OffsetEntry]) {
         let url = InkPulseDefaults.offsetsFile
         ensureDirectory(url.deletingLastPathComponent())
-        guard let data = try? JSONEncoder().encode(offsets) else { return }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .secondsSince1970
+        guard let data = try? encoder.encode(offsets) else { return }
         try? data.write(to: url, options: .atomic)
     }
 

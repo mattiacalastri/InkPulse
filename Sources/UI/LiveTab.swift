@@ -145,6 +145,14 @@ struct LiveTab: View {
             dashStat("subs", "\(stats.totalAgents)", color: Color(hex: "#4A9EFF"))
             dashDivider()
             dashStat("tok/agent", String(format: "%.0f", stats.throughputPerAgent), color: .white.opacity(0.7))
+
+            if let used = stats.quotaUsedDisplay, let remaining = stats.quotaRemainingPercent {
+                dashDivider()
+                dashStat(stats.planName ?? "plan", used, color: quotaStatColor(remaining))
+            } else if let bp = stats.budgetPercent {
+                dashDivider()
+                dashStat("budget", String(format: "%.0f%%", bp * 100), color: budgetStatColor(bp))
+            }
         }
         .padding(.vertical, 12)
         .background(
@@ -178,6 +186,18 @@ struct LiveTab: View {
     private func contextStatColor(_ percent: Double) -> Color {
         if percent <= 0 { return .white.opacity(0.3) }
         return contextColor(for: percent)
+    }
+
+    private func quotaStatColor(_ percent: Double) -> Color {
+        if percent > 0.50 { return Color(hex: "#00d4aa") }
+        if percent > 0.20 { return Color(hex: "#FFA500") }
+        return Color(hex: "#FF4444")
+    }
+
+    private func budgetStatColor(_ percent: Double) -> Color {
+        if percent < 0.60 { return Color(hex: "#00d4aa") }
+        if percent < 0.80 { return Color(hex: "#FFA500") }
+        return Color(hex: "#FF4444")
     }
 
     private func trendArrow(_ delta: Double) -> String {

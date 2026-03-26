@@ -94,6 +94,14 @@ struct PopoverView: View {
                 statCell("err", String(format: "%.1f%%", stats.avgErrorRate * 100), color: stats.avgErrorRate < 0.05 ? Color(hex: "#00d4aa") : Color(hex: "#FF4444"))
                 statDivider()
                 statCell("cost", String(format: "€%.2f", stats.totalCost), color: .primary)
+
+                if let used = stats.quotaUsedDisplay, let remaining = stats.quotaRemainingPercent {
+                    statDivider()
+                    statCell(stats.planName ?? "plan", used, color: quotaColor(remaining))
+                } else if let bp = stats.budgetPercent {
+                    statDivider()
+                    statCell("budget", String(format: "%.0f%%", bp * 100), color: budgetColor(bp))
+                }
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
             .background(Color.primary.opacity(0.03))
@@ -235,6 +243,18 @@ struct PopoverView: View {
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func quotaColor(_ percent: Double) -> Color {
+        if percent > 0.50 { return Color(hex: "#00d4aa") }
+        if percent > 0.20 { return Color(hex: "#FFA500") }
+        return Color(hex: "#FF4444")
+    }
+
+    private func budgetColor(_ percent: Double) -> Color {
+        if percent < 0.60 { return Color(hex: "#00d4aa") }
+        if percent < 0.80 { return Color(hex: "#FFA500") }
+        return Color(hex: "#FF4444")
     }
 
     private func statDivider() -> some View {

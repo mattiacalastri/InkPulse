@@ -11,6 +11,7 @@ final class AppState: ObservableObject {
         @Published var sessionFilePaths: [String: String] = [:] // sessionId → filePath
     @Published var sessionCwds: [String: String] = [:] // sessionId → cwd
     @Published var sessionBranches: [String: String] = [:] // sessionId → gitBranch
+    @Published var quotaSnapshot: QuotaSnapshot?
 
     private var heartbeatLogger: HeartbeatLogger?
     private var sessionWatcher: SessionWatcher?
@@ -18,6 +19,7 @@ final class AppState: ObservableObject {
     private var heartbeatTimer: Timer?
     private(set) var notificationManager = NotificationManager()
     private(set) var anomalyWatcher: AnomalyWatcher?
+    private var quotaFetcher: QuotaFetcher?
 
     private let maxTokenHistory = 300  // ~5 min at 1 sample/s
 
@@ -73,6 +75,15 @@ final class AppState: ObservableObject {
         // Notifications
         notificationManager.requestAuthorization()
         anomalyWatcher = AnomalyWatcher(notificationManager: notificationManager)
+
+        // Quota fetcher — OAuth token already approved in Keychain
+        // Silently fails if not authorized — no popups
+        quotaFetcher = QuotaFetcher()
+        quotaFetcher?.start { [weak self] snapshot in
+            Task { @MainActor in
+                self?.quotaSnapshot = snapshot
+            }
+        }
     }
 
     // MARK: - Refresh

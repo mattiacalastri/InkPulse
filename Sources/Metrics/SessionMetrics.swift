@@ -144,13 +144,14 @@ final class SessionMetrics {
             totalCacheRead += msg.usage.cacheReadInputTokens
             totalCacheCreation += msg.usage.cacheCreationInputTokens
 
-            // Cost
+            // Cost (with tiered pricing for Sonnet >200K)
             if let c = Pricing.costEUR(
                 model: msg.model,
                 inputTokens: msg.usage.inputTokens,
                 outputTokens: msg.usage.outputTokens,
                 cacheReadTokens: msg.usage.cacheReadInputTokens,
-                cacheCreationTokens: msg.usage.cacheCreationInputTokens
+                cacheCreationTokens: msg.usage.cacheCreationInputTokens,
+                contextTokens: lastContextTokens
             ) {
                 costEUR += c
             }

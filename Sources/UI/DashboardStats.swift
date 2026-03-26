@@ -60,4 +60,33 @@ struct DashboardStats {
     var config: InkPulseConfig {
         ConfigLoader.load()
     }
+
+    // MARK: - Quota (from Anthropic API)
+
+    var quotaSnapshot: QuotaSnapshot? {
+        appState.quotaSnapshot
+    }
+
+    /// Remaining quota as fraction 0.0-1.0 (for color coding).
+    var quotaRemainingPercent: Double? {
+        quotaSnapshot?.primaryRemainingPercent
+    }
+
+    /// Utilization as display string.
+    var quotaUsedDisplay: String? {
+        guard let fh = quotaSnapshot?.fiveHour else { return nil }
+        return String(format: "%.0f%%", fh.utilization)
+    }
+
+    var planName: String? {
+        quotaSnapshot?.plan.rawValue
+    }
+
+    // MARK: - Budget (local)
+
+    var budgetPercent: Double? {
+        let budget = config.dailyBudgetEUR
+        guard budget > 0 else { return nil }
+        return totalCost / budget
+    }
 }
