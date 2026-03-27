@@ -11,6 +11,7 @@ struct TeamSectionView: View {
     let isPopover: Bool
     var onSpawnTeam: ((TeamConfig, Set<String>) -> Void)?
     var onSpawnRole: ((RoleConfig, TeamConfig) -> Void)?
+    var onKillSession: ((String?, String) -> Void)?  // (cwd, sessionId)
     var wsConnected: Set<String> = []
 
     @State private var isExpanded = true
@@ -45,6 +46,9 @@ struct TeamSectionView: View {
                             },
                             onSpawn: {
                                 onSpawnRole?(slot.role, team)
+                            },
+                            onKill: slot.sessionId.map { sid in
+                                { onKillSession?(slot.cwd, sid) }
                             },
                             wsConnected: slot.sessionId.map { wsConnected.contains($0) } ?? false
                         )
@@ -140,6 +144,8 @@ struct RoleCardView: View {
     let isPopover: Bool
     let onTap: () -> Void
     var onSpawn: (() -> Void)?
+    var onKill: (() -> Void)?
+    @State private var showKillConfirm = false
     var wsConnected: Bool = false
 
     @State private var isSpawning = false
@@ -269,21 +275,47 @@ struct RoleCardView: View {
                 }
             }
 
-            // Open button
-            if let dir = cwd {
-                Button(action: { TerminalOpener.open(cwd: dir) }) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "terminal.fill")
-                            .font(.system(size: 8))
-                        Text("Open")
-                            .font(.system(size: 8, weight: .semibold, design: .rounded))
+            // Action buttons
+            HStack(spacing: 6) {
+                if let dir = cwd {
+                    Button(action: { TerminalOpener.open(cwd: dir) }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "terminal.fill")
+                                .font(.system(size: 8))
+                            Text("Open")
+                                .font(.system(size: 8, weight: .semibold, design: .rounded))
+                        }
+                        .foregroundStyle(teamColor)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(teamColor.opacity(0.1)))
                     }
-                    .foregroundStyle(teamColor)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(teamColor.opacity(0.1)))
+                    .buttonStyle(.borderless)
                 }
-                .buttonStyle(.borderless)
+
+                if onKill != nil {
+                    Button(action: { showKillConfirm = true }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 8))
+                            Text("Quit")
+                                .font(.system(size: 8, weight: .semibold, design: .rounded))
+                        }
+                        .foregroundStyle(.red.opacity(0.8))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(.red.opacity(0.08)))
+                    }
+                    .buttonStyle(.borderless)
+                    .alert("Stop Agent?", isPresented: $showKillConfirm) {
+                        Button("Cancel", role: .cancel) {}
+                        Button("Stop", role: .destructive) { onKill?() }
+                    } message: {
+                        Text("This will send SIGTERM to \(slot.role.name). The agent will attempt to save its work before exiting.")
+                    }
+                }
+
+                Spacer()
             }
         }
     }

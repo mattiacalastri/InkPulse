@@ -51,6 +51,8 @@ struct AgentCardView: View {
     let gitBranch: String?
     let isExpanded: Bool
     let onTap: () -> Void
+    var onKill: (() -> Void)?
+    @State private var showKillConfirm = false
 
     private var mood: (emoji: String, status: String, color: Color) {
         agentMood(for: snapshot)
@@ -222,6 +224,28 @@ struct AgentCardView: View {
             }
             .buttonStyle(.borderless)
             .disabled(cwd == nil)
+
+            if onKill != nil {
+                Button(action: { showKillConfirm = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 9))
+                        Text("Quit")
+                            .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(.red.opacity(0.8))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(.red.opacity(0.08)))
+                }
+                .buttonStyle(.borderless)
+                .alert("Stop Agent?", isPresented: $showKillConfirm) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Stop", role: .destructive) { onKill?() }
+                } message: {
+                    Text("This will terminate the Claude Code process.")
+                }
+            }
 
             Spacer()
 

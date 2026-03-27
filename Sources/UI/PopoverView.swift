@@ -262,6 +262,9 @@ struct PopoverView: View {
                         onSpawnRole: { role, config in
                             appState.spawnRole(role, team: config)
                         },
+                        onKillSession: { cwd, sessionId in
+                            appState.killSession(cwd: cwd, sessionId: sessionId)
+                        },
                         wsConnected: appState.wsServer?.connectedSessionIds ?? []
                     )
                 }
@@ -317,6 +320,12 @@ struct PopoverView: View {
                                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                             expandedSessionId = expandedSessionId == snap.sessionId ? nil : snap.sessionId
                                         }
+                                    },
+                                    onKill: {
+                                        appState.killSession(
+                                            cwd: appState.sessionCwds[snap.sessionId],
+                                            sessionId: snap.sessionId
+                                        )
                                     }
                                 )
                             }
@@ -376,6 +385,12 @@ struct PopoverView: View {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                 expandedSessionId = expandedSessionId == snap.sessionId ? nil : snap.sessionId
                             }
+                        },
+                        onKill: {
+                            appState.killSession(
+                                cwd: appState.sessionCwds[snap.sessionId],
+                                sessionId: snap.sessionId
+                            )
                         }
                     )
                 }

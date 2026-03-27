@@ -275,6 +275,23 @@ final class AppState: ObservableObject {
         }
     }
 
+    func killSession(cwd: String?, sessionId: String) {
+        guard let pid = ProcessResolver.findPID(for: cwd) else {
+            AppState.log("Kill failed: no PID found for \(sessionId)")
+            notificationManager.send(
+                title: "Kill Failed",
+                body: "Could not find process for session \(String(sessionId.prefix(8)))"
+            )
+            return
+        }
+        SessionKiller.kill(pid: pid)
+        AppState.log("Kill requested for \(sessionId) (PID \(pid))")
+        notificationManager.send(
+            title: "Agent Stopped",
+            body: "Sent SIGTERM to PID \(pid)"
+        )
+    }
+
     func sendTask(_ prompt: String, to sessionId: String) {
         let message = WSOutbound.command(WSCommandMessage(action: "task", prompt: prompt))
         wsServer?.send(message, to: sessionId)
