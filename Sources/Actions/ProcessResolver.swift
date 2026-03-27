@@ -4,36 +4,30 @@ import Foundation
 enum ProcessResolver {
 
     /// Finds the PID of a `claude` process whose cwd matches the given directory.
+    /// Uses pgrep to find claude processes, then lsof to verify cwd.
     /// Returns nil if no match is found.
     static func findPID(for cwd: String?) -> pid_t? {
         guard let cwd = cwd, !cwd.isEmpty else { return nil }
 
-        // Step 1: Find all processes ending with "claude"
-        guard let psOutput = runProcess("/bin/ps", arguments: ["-eo", "pid,command"]) else {
+        // Step 1: Find all claude process PIDs via pgrep
+        guard let pgrepOutput = runProcess("/usr/bin/pgrep", arguments: ["-f", "claude"]) else {
             return nil
         }
 
-        var candidatePIDs: [pid_t] = []
-        for line in psOutput.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            // Match lines where command ends with "claude" or contains "claude" as the main process
-            if trimmed.hasSuffix("claude") || trimmed.contains("/claude ") || trimmed.contains("claude --") {
-                let parts = trimmed.split(separator: " ", maxSplits: 1)
-                if let pidStr = parts.first, let pid = pid_t(pidStr) {
-                    candidatePIDs.append(pid)
-                }
-            }
-        }
+        let pids = pgrepOutput
+            .components(separatedBy: .newlines)
+            .compactMap { pid_t($0.trimmingCharacters(in: .whitespaces)) }
+
+        guard !pids.isEmpty else { return nil }
 
         // Step 2: For each candidate, check cwd via lsof
-        for pid in candidatePIDs {
-            guard let lsofOutput = runProcess("/usr/sbin/lsof", arguments: ["-p", "\(pid)"]) else {
+        for pid in pids {
+            guard let lsofOutput = runProcess("/usr/sbin/lsof", arguments: ["-p", "\(pid)", "-Fn"]) else {
                 continue
             }
-            for line in lsofOutput.components(separatedBy: .newlines) {
-                if line.contains("cwd") && line.contains(cwd) {
-                    return pid
-                }
+            // lsof -Fn outputs: "fcwd\nn<path>" — look for our cwd
+            if lsofOutput.contains(cwd) {
+                return pid
             }
         }
 
