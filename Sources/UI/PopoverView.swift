@@ -91,6 +91,9 @@ struct PopoverView: View {
             }
             .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 6)
 
+            // ── PROMPT BOX ──
+            PromptBoxView()
+
             // ── STATS STRIP ──
             HStack(spacing: 0) {
                 statCell("tok/min", String(format: "%.0f", stats.avgTokenMin), color: .primary)
