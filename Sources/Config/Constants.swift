@@ -19,7 +19,7 @@ enum InkPulseDefaults {
     static let refreshIntervalMs: Int = 1_000
     static let heartbeatIntervalMs: Int = 5_000
     static let purgeDays: Int = 30
-    static let sessionTimeoutSeconds: Int = 300
+    static let sessionTimeoutSeconds: Int = 300  // 5min — stable matching prevents flicker
 
     // MARK: - Window Sizes
 

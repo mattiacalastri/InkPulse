@@ -1,60 +1,61 @@
 # InkPulse
 
-**Heartbeat monitor for Claude Code** — a native macOS menu bar app that tracks AI agent health in real-time.
+**Control Plane for AI Agent Teams** — a native macOS app that monitors, organizes, and orchestrates Claude Code sessions in real-time.
 
-CodexBar tells you how much you spent. InkPulse tells you the **rhythm**.
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue) ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange) ![License Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green)
 
-![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue) ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange) ![License MIT](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/mattiacalastri/InkPulse/actions/workflows/ci.yml/badge.svg)
+## The Problem
 
-<p align="center">
-  <img src="docs/images/inkpulse-dashboard.png" alt="InkPulse Dashboard" width="380">
-</p>
+Claude Code is built for 1 developer, 1 project, 1 terminal. Power users running 8-15 sessions across multiple projects face:
 
-## What it does
+- **No team structure** — flat list of sessions with no logical grouping
+- **No orchestration** — can't spawn or coordinate sessions from a central point
+- **No inter-session awareness** — each session is an island
+- **Cognitive overload** — tab-switching across 15 terminals is unsustainable
 
-InkPulse reads Claude Code's session JSONL files and computes 8 health metrics with sliding windows. A pulsating heart in your menu bar changes color based on agent health.
+InkPulse solves this.
 
-**8 metrics tracked in real-time:**
+## What It Does
+
+### Team Org Chart
+Sessions grouped into teams with named roles. No more flat lists.
+
+```
+Bot Team [~/btc_predictions]
+  PM         — roadmap, priorities
+  Dev        — code, deploy, debug
+  Researcher — R&D, experiments
+
+AuraHome Team [~/projects/aurahome]
+  PM         — product roadmap
+  Dev        — WP/WooCommerce
+  Content    — SEO, copy, i18n
+```
+
+### One-Click Spawn
+Click **Spawn** on a team and InkPulse opens Terminal windows for each role, running Claude Code with the role prompt injected. Agents start working immediately.
+
+### Real-Time Health Monitoring
+8 metrics tracked per session with sliding windows:
 
 | Metric | What it measures |
 |--------|-----------------|
-| tok/min | Token throughput (60s rolling window) |
-| Tool freq | Tool calls per minute |
+| tok/min | Token throughput (60s window) |
 | Cache hit | Cache read vs total input ratio |
-| Error rate | Failed tool calls / total (5min window) |
-| Think:Output | Thinking vs output token ratio |
-| Subagents | Active spawned agents |
+| Error rate | Failed tool calls (5min window) |
 | Cost | Running session cost in EUR |
-| Idle gaps | Average pause between events |
+| Context % | Context window utilization |
+| Subagents | Spawned agent count |
+| Think:Output | Reasoning vs output ratio |
+| Idle gaps | Pause time between events |
 
-**5 anomaly patterns detected:**
+### Smart Notifications
+macOS alerts for deploy completion, error spikes, idle agents burning credits.
 
-| Pattern | Meaning |
-|---------|---------|
-| Stall | Agent blocked or waiting for permission |
-| Loop | Retrying something that keeps failing |
-| Hemorrhage | High cost + low cache = context rebuilding |
-| Explosion | Too many subagents spawned |
-| Deep Thinking | High think ratio + high throughput = good (blue, not red) |
-
-## Features
-
-- Native macOS menu bar widget (SwiftUI MenuBarExtra)
-- Pulsating heart icon — color reflects health (teal/orange/red/blue)
-- Multi-session monitoring (works with claude-squad)
-- Per-agent emoji mood (thinking, forging, sleeping, stalled, spawning...)
-- Project names from working directory (not UUIDs)
-- Stats strip: tok/min, peak, cache%, error%, cost
-- ECG sparkline showing token flow over time
-- Native SwiftUI settings panel
-- Heartbeat JSONL logging (daily rotation, 30-day retention)
-- Chart.js HTML report generation
-- Crash recovery via offset checkpoints
-- Zero network calls — everything stays local
+### WebSocket Control Channel
+Bidirectional communication between InkPulse and Claude Code sessions on `localhost:9998`. Send tasks to specific agents programmatically.
 
 ## Installation
-
-### Build from source
 
 ```bash
 git clone https://github.com/mattiacalastri/InkPulse.git
@@ -62,84 +63,105 @@ cd InkPulse
 swift build -c release
 ```
 
-### Run
+### Install to Applications
 
 ```bash
-.build/release/InkPulse
+cp -f .build/release/InkPulse /Applications/InkPulse.app/Contents/MacOS/InkPulse
+open /Applications/InkPulse.app
 ```
-
-A heart icon appears in your menu bar. Click it to see the dashboard.
 
 ### Requirements
 
 - macOS 14.0 Sonoma or later
 - Claude Code installed (`~/.claude/projects/` must exist)
-- Swift 5.9+ (comes with Xcode 15+)
-
-## How it works
-
-```
-~/.claude/projects/*/*.jsonl  →  SessionWatcher (polling 1s)
-                                      ↓
-                                 JSONLParser (line → typed event)
-                                      ↓
-                                 MetricsEngine (8 metrics + sliding windows)
-                                      ↓
-                              ┌───────┼───────┐
-                              ↓       ↓       ↓
-                         Menu Bar  Heartbeat  Report
-                         (SwiftUI)  (JSONL)   (HTML)
-```
-
-InkPulse watches `~/.claude/projects/` for recently modified JSONL files, tails new lines, parses events, and computes metrics. It **never modifies** Claude Code files — read-only.
-
-## Data
-
-All data stays local:
-
-```
-~/.inkpulse/
-├── heartbeats/          # Daily JSONL snapshots (every 5s)
-│   └── heartbeat-2026-03-23.jsonl
-├── reports/             # Generated HTML reports
-│   └── report-abc123-2026-03-23.html
-└── offsets.json         # Crash recovery checkpoints
-```
+- Swift 5.9+ (Xcode 15+)
 
 ## Configuration
 
-Click **Config** in the popover for a native settings panel:
+### Teams (`~/.inkpulse/teams.json`)
 
-<p align="center">
-  <img src="docs/images/inkpulse-settings.png" alt="InkPulse Settings" width="380">
-</p>
+```json
+{
+  "teams": [
+    {
+      "id": "backend",
+      "name": "Backend",
+      "cwd": "~/projects/my-api",
+      "color": "#00d4aa",
+      "roles": [
+        {
+          "id": "pm",
+          "name": "PM",
+          "prompt": "You are the Project Manager. Read CLAUDE.md, prioritize tasks.",
+          "icon": "chart.bar.fill"
+        },
+        {
+          "id": "dev",
+          "name": "Dev",
+          "prompt": "You are the Lead Developer. Implement features and fix bugs.",
+          "icon": "hammer.fill"
+        },
+        {
+          "id": "reviewer",
+          "name": "Reviewer",
+          "prompt": "You are the Code Reviewer. Review PRs and suggest improvements.",
+          "icon": "magnifyingglass"
+        }
+      ]
+    }
+  ]
+}
+```
 
-- **Refresh Rate** — How often metrics update (0.5-5 Hz)
-- **Heartbeat Interval** — How often snapshots are logged (1-30s)
-- **Session Timeout** — When to consider a session inactive (1-30 min)
-- **Tail Size** — How much of each JSONL to read on startup (100-2000 KB)
+Each team maps to a working directory. Roles define the prompts injected when spawning agents.
 
-## Health Score
+### Settings (`~/.inkpulse/config.json`)
 
-Composite score 0-100 computed as a weighted average of individual metric scores:
+Optional overrides for refresh rate, session timeout, health score weights, daily budget alerts, and pillar color overrides.
 
-| Metric | Weight | Healthy | Degraded | Critical |
-|--------|--------|---------|----------|----------|
-| tok/min | 15% | >500 | 100-500 | <100 |
-| Tool freq | 15% | ~5/min (bell curve) | 0 or >12 | >17 |
-| Cache hit | 15% | >60% | 30-60% | <30% |
-| Error rate | 15% | <5% | 5-20% | >20% |
-| Idle gaps | 10% | <15s | 15-60s | >60s |
-| Think:Out | 10% | 1:1-4:1 | 4:1-8:1 | >8:1 |
-| Subagents | 10% | 0-5 | 6-10 | >10 |
-| Cost | 10% | <2 EUR | 2-8 EUR | >8 EUR |
+## Architecture
+
+```
+InkPulse.app (Swift, single binary)
+  UI Layer (SwiftUI)           WebSocket Server (Network.framework, :9998)
+    Team Org Chart               Session Registry
+    Role Cards                   Command Dispatch
+    Spawn Buttons                Status Receive
+
+  JSONL Monitor                Notifications
+    File Tailer                  EventDetector (deploy, errors, idle)
+    Metrics Engine               AnomalyWatcher (stall, loop, hemorrhage)
+    Health + EGI Score           macOS UNUserNotificationCenter
+```
+
+Zero dependencies. Everything is built with Apple frameworks.
+
+## How It Works
+
+1. InkPulse watches `~/.claude/projects/` for JSONL log files
+2. Parses events, computes 8 health metrics per session with sliding windows
+3. Matches sessions to team roles by working directory
+4. Shows live org chart in menu bar popover + full window dashboard
+5. Spawn opens Terminal.app windows with `claude "<role prompt>"`
+6. WebSocket server enables bidirectional control
+
+**Read-only** — InkPulse never modifies Claude Code files.
+
+## Roadmap
+
+- [x] Team org chart with collapsible sections
+- [x] One-click spawn with role prompts
+- [x] WebSocket control channel
+- [x] Smart event notifications
+- [ ] MCP Hub — shared MCP server pool (N*M processes -> M+1)
+- [ ] Send Task UI — dispatch prompts to agents from dashboard
 
 ## License
 
-MIT
+Apache 2.0
 
 ## Author
 
 Built by [Mattia Calastri](https://github.com/mattiacalastri) with Claude Code.
 
-Part of the [Astra OS](https://astraai.it) ecosystem — building observable, self-aware AI agent infrastructure.
+Part of the [Astra Digital](https://digitalastra.it) ecosystem.

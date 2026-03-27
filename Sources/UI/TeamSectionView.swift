@@ -11,6 +11,7 @@ struct TeamSectionView: View {
     let isPopover: Bool
     var onSpawnTeam: ((TeamConfig, Set<String>) -> Void)?
     var onSpawnRole: ((RoleConfig, TeamConfig) -> Void)?
+    var wsConnected: Set<String> = []
 
     @State private var isExpanded = true
     @State private var isSpawning = false
@@ -44,7 +45,8 @@ struct TeamSectionView: View {
                             },
                             onSpawn: {
                                 onSpawnRole?(slot.role, team)
-                            }
+                            },
+                            wsConnected: slot.sessionId.map { wsConnected.contains($0) } ?? false
                         )
                     }
                 }
@@ -138,6 +140,7 @@ struct RoleCardView: View {
     let isPopover: Bool
     let onTap: () -> Void
     var onSpawn: (() -> Void)?
+    var wsConnected: Bool = false
 
     @State private var isSpawning = false
 
@@ -214,6 +217,13 @@ struct RoleCardView: View {
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
                     .background(Capsule().fill(modelColor(snap.model).opacity(0.12)))
+            }
+
+            // WebSocket connected indicator
+            if wsConnected {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 7))
+                    .foregroundStyle(Color(hex: "#00d4aa"))
             }
         }
     }

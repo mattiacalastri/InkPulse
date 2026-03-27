@@ -36,8 +36,13 @@ struct TeamState: Identifiable {
     let config: TeamConfig
     var slots: [RoleSlot]
 
-    /// Number of occupied role slots (active sessions).
-    var activeCount: Int { slots.filter { $0.session != nil }.count }
+    /// Number of truly active role slots (had events in last 2 min).
+    var activeCount: Int {
+        slots.filter { slot in
+            guard let snap = slot.session else { return false }
+            return Date().timeIntervalSince(snap.lastEventTime) < 120
+        }.count
+    }
 
     /// Total cost across all occupied slots.
     var totalCost: Double { slots.compactMap { $0.session?.costEUR }.reduce(0, +) }

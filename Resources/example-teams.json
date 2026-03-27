@@ -1,0 +1,56 @@
+{
+  "teams": [
+    {
+      "id": "backend",
+      "name": "Backend",
+      "cwd": "~/projects/my-api",
+      "color": "#00d4aa",
+      "roles": [
+        {
+          "id": "pm",
+          "name": "PM",
+          "prompt": "You are the Project Manager. Read CLAUDE.md, prioritize tasks, coordinate with Dev.",
+          "icon": "chart.bar.fill"
+        },
+        {
+          "id": "dev",
+          "name": "Dev",
+          "prompt": "You are the Lead Developer. Implement features, fix bugs, deploy. Start by checking git status.",
+          "icon": "hammer.fill"
+        },
+        {
+          "id": "reviewer",
+          "name": "Reviewer",
+          "prompt": "You are the Code Reviewer. Review recent changes, suggest improvements, check for bugs.",
+          "icon": "magnifyingglass"
+        }
+      ]
+    },
+    {
+      "id": "frontend",
+      "name": "Frontend",
+      "cwd": "~/projects/my-app",
+      "color": "#4A9EFF",
+      "roles": [
+        {
+          "id": "pm",
+          "name": "PM",
+          "prompt": "You are the Frontend PM. Prioritize UI tasks, track progress.",
+          "icon": "chart.bar.fill"
+        },
+        {
+          "id": "dev",
+          "name": "Dev",
+          "prompt": "You are the Frontend Developer. Build components, fix styling, optimize performance.",
+          "icon": "hammer.fill"
+        },
+        {
+          "id": "design",
+          "name": "Design",
+          "prompt": "You are the Design specialist. Review UI consistency, suggest UX improvements.",
+          "icon": "paintbrush.fill"
+        }
+      ]
+    }
+  ]
+}
