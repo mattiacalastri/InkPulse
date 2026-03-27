@@ -1,100 +1,66 @@
 import AppKit
 
-/// Opens or focuses a Terminal.app window running Claude Code in the given directory.
+/// Opens or focuses a Terminal.app window running Claude Code.
+/// Matches by window title (set during Spawn) or by cwd via process lookup.
 enum TerminalOpener {
 
+    /// Focus the Terminal window for the given cwd.
+    /// Strategy:
+    ///   1. Match window custom title containing the cwd's last path component
+    ///   2. Match any tab running a claude process
+    ///   3. Fallback: just activate Terminal
     static func open(cwd: String) {
-        let escapedDir = cwd.replacingOccurrences(of: "'", with: "'\\''")
-        // Strategy: find the tab whose custom title or processes match this cwd,
-        // bring THAT window forward, select THAT tab, miniaturize all other Terminal windows.
+        // Extract meaningful identifier from cwd for title matching
+        // e.g. ~/btc_predictions -> "btc_predictions", ~/projects/aurahome -> "aurahome"
+        let cwdName = URL(fileURLWithPath: cwd).lastPathComponent
+
         let script = """
         tell application "Terminal"
             activate
-            set targetWindow to missing value
-            set targetTab to missing value
+            set matched to false
 
-            -- Search by cwd: check if any process in the tab is running from this directory
+            -- Pass 1: match custom title containing the directory name
             repeat with w in windows
-                repeat with t in tabs of w
-                    try
-                        set tabProcs to processes of t
-                        repeat with p in tabProcs
-                            if p contains "claude" then
-                                -- Check if this tab's tty has our cwd via lsof
-                                set ttyPath to tty of t
-                                if ttyPath is not "" then
-                                    set targetWindow to w
-                                    set targetTab to t
-                                end if
-                            end if
-                        end repeat
-                    end try
-                    if targetTab is not missing value then exit repeat
-                end repeat
-                if targetTab is not missing value then exit repeat
-            end repeat
-
-            -- Better match: use shell to find the exact claude process with matching cwd
-            if targetTab is not missing value then
-                -- Try to find the EXACT tab by matching cwd via pgrep + lsof
-                set bestWindow to missing value
-                set bestTab to missing value
                 try
-                    set cwdPids to do shell script "lsof -c claude 2>/dev/null | grep cwd | grep '\(escapedDir)' | awk '{print $2}' || true"
-                    if cwdPids is not "" then
-                        set pidList to paragraphs of cwdPids
-                        repeat with w in windows
-                            repeat with t in tabs of w
-                                try
-                                    set ttyPath to tty of t
-                                    if ttyPath is not "" then
-                                        repeat with aPid in pidList
-                                            try
-                                                set ttyCheck to do shell script "lsof -p " & aPid & " 2>/dev/null | grep " & ttyPath & " || true"
-                                                if ttyCheck is not "" then
-                                                    set bestWindow to w
-                                                    set bestTab to t
-                                                    exit repeat
-                                                end if
-                                            end try
-                                        end repeat
-                                    end if
-                                end try
-                                if bestTab is not missing value then exit repeat
-                            end repeat
-                            if bestTab is not missing value then exit repeat
-                        end repeat
+                    if custom title of w contains "\(cwdName)" then
+                        set index of w to 1
+                        set matched to true
+                        exit repeat
                     end if
                 end try
-                if bestTab is not missing value then
-                    set targetWindow to bestWindow
-                    set targetTab to bestTab
-                end if
-            end if
+            end repeat
 
-            if targetTab is not missing value then
-                -- Focus the matched window and tab
-                set selected tab of targetWindow to targetTab
-                set index of targetWindow to 1
-
-                -- Miniaturize all OTHER Terminal windows
+            -- Pass 2: if no match, try matching by tab processes
+            if not matched then
                 repeat with w in windows
-                    if w is not targetWindow then
+                    repeat with t in tabs of w
                         try
-                            set miniaturized of w to true
+                            set tabProcs to processes of t
+                            repeat with p in tabProcs
+                                if p contains "claude" then
+                                    -- Found a claude tab, focus it
+                                    set selected tab of w to t
+                                    set index of w to 1
+                                    set matched to true
+                                    exit repeat
+                                end if
+                            end repeat
                         end try
-                    end if
+                        if matched then exit repeat
+                    end repeat
+                    if matched then exit repeat
                 end repeat
             end if
         end tell
         """
+
         if let appleScript = NSAppleScript(source: script) {
             var error: NSDictionary?
             appleScript.executeAndReturnError(&error)
             if let error = error {
                 AppState.log("Open terminal failed: \(error)")
-                let fallback = "tell application \"Terminal\" to activate"
-                NSAppleScript(source: fallback)?.executeAndReturnError(nil)
+                // Fallback: just activate Terminal
+                NSAppleScript(source: "tell application \"Terminal\" to activate")?.executeAndReturnError(nil)
             }
         }
     }
