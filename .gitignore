@@ -13,3 +13,7 @@ Packages/
 xcuserdata/
 .superpowers/
 .firecrawl/
+credentials/
+client_secret*
+*.pfx
+service_account*.json
