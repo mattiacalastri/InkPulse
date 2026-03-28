@@ -10,6 +10,7 @@ struct ConfigView: View {
     @AppStorage("inkpulse_daily_budget") private var dailyBudget: Double = 0.0
     @AppStorage("inkpulse_sound_anomaly") private var soundOnAnomaly: Bool = true
     @State private var showingWizard = false
+    @State private var showingDeckEditor = false
 
     private var hasTeams: Bool { !appState.teamConfigs.isEmpty }
 
@@ -128,6 +129,23 @@ struct ConfigView: View {
 
                     Divider().padding(.vertical, 4)
 
+                    // ── DECK ──
+                    sectionHeader("Motivational Deck")
+
+                    Button(action: { showingDeckEditor = true }) {
+                        Label("Edit Deck", systemImage: "quote.bubble.fill")
+                            .font(.system(.caption, design: .rounded))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+
+                    Text("Customize the quotes shown in the dashboard header.")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+
+                    Divider().padding(.vertical, 4)
+
                     // ── INFO ──
                     sectionHeader("About")
 
@@ -174,6 +192,9 @@ struct ConfigView: View {
         .frame(width: 560)
         .sheet(isPresented: $showingWizard) {
             SetupWizardView(appState: appState, isPresented: $showingWizard)
+        }
+        .sheet(isPresented: $showingDeckEditor) {
+            DeckEditorView(isPresented: $showingDeckEditor)
         }
     }
 
