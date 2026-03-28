@@ -117,12 +117,32 @@ final class AppState: ObservableObject {
 
     // MARK: - Refresh
 
+    // MARK: - Menu Bar Values (top-level @Published so MenuBarExtra label refreshes)
+    @Published var menuBarHealth: Int = -1
+    @Published var menuBarTokenMin: Double = 0
+    @Published var menuBarCost: Double = 0
+    /// Formatted string for menu bar label — MenuBarExtra only reliably updates with direct Text binding.
+    @Published var menuBarLabel: String = "\u{1F419}"
+
     private func refresh() {
         guard !isPaused else { return }
         previousHealth = metricsEngine.aggregateHealth
         let oldSnaps = Array(metricsEngine.sessions.values)
         previousTokenMin = oldSnaps.isEmpty ? 0 : oldSnaps.map(\.tokenMin).reduce(0, +) / Double(oldSnaps.count)
         metricsEngine.refreshSnapshots()
+
+        // Propagate to top-level @Published for MenuBarExtra (nested ObservableObject won't trigger label refresh)
+        menuBarHealth = metricsEngine.aggregateHealth
+        let currentSnaps = Array(metricsEngine.sessions.values)
+        menuBarTokenMin = currentSnaps.isEmpty ? 0 : currentSnaps.map(\.tokenMin).reduce(0, +) / Double(currentSnaps.count)
+        menuBarCost = currentSnaps.map(\.costEUR).reduce(0, +)
+
+        // Format menu bar label — MenuBarExtra only updates reliably via direct Text binding
+        if menuBarHealth >= 0 {
+            menuBarLabel = "\u{1F419} \(menuBarHealth) · \(Int(menuBarTokenMin))t · €\(String(format: "%.2f", menuBarCost))"
+        } else {
+            menuBarLabel = "\u{1F419}"
+        }
 
         // Append average tokenMin to history for sparkline
         let snaps = Array(metricsEngine.sessions.values)

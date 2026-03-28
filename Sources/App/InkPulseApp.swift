@@ -15,10 +15,8 @@ struct InkPulseApp: App {
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 680, height: 640)
 
-        MenuBarExtra {
+        MenuBarExtra(appState.menuBarLabel) {
             PopoverView(appState: appState)
-        } label: {
-            MenuBarView(appState: appState)
         }
         .menuBarExtraStyle(.window)
     }

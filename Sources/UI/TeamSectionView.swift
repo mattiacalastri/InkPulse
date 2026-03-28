@@ -4,6 +4,7 @@ import SwiftUI
 
 struct TeamSectionView: View {
     let teamState: TeamState
+    let sessions: [String: MetricsSnapshot]
     let sessionCwds: [String: String]
     let sessionBranches: [String: String]
     let sessionFilePaths: [String: String]
@@ -28,30 +29,55 @@ struct TeamSectionView: View {
 
             // Role cards (when expanded)
             if isExpanded {
-                HStack(spacing: 8) {
-                    ForEach(teamState.slots) { slot in
-                        RoleCardView(
-                            slot: slot,
-                            teamColor: team.resolvedColor,
-                            filePath: slot.sessionId.flatMap { sessionFilePaths[$0] },
-                            cwd: slot.cwd,
-                            gitBranch: slot.sessionId.flatMap { sessionBranches[$0] },
-                            isExpanded: slot.sessionId == expandedSessionId,
-                            isPopover: isPopover,
-                            onTap: {
-                                guard let sid = slot.sessionId else { return }
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    expandedSessionId = expandedSessionId == sid ? nil : sid
-                                }
-                            },
-                            onSpawn: {
-                                onSpawnRole?(slot.role, team)
-                            },
-                            onKill: slot.sessionId.map { sid in
-                                { onKillSession?(slot.cwd, sid) }
-                            },
-                            wsConnected: slot.sessionId.map { wsConnected.contains($0) } ?? false
-                        )
+                if !teamState.slots.isEmpty {
+                    HStack(spacing: 8) {
+                        ForEach(teamState.slots) { slot in
+                            RoleCardView(
+                                slot: slot,
+                                teamColor: team.resolvedColor,
+                                filePath: slot.sessionId.flatMap { sessionFilePaths[$0] },
+                                cwd: slot.cwd,
+                                gitBranch: slot.sessionId.flatMap { sessionBranches[$0] },
+                                isExpanded: slot.sessionId == expandedSessionId,
+                                isPopover: isPopover,
+                                onTap: {
+                                    guard let sid = slot.sessionId else { return }
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                        expandedSessionId = expandedSessionId == sid ? nil : sid
+                                    }
+                                },
+                                onSpawn: {
+                                    onSpawnRole?(slot.role, team)
+                                },
+                                onKill: slot.sessionId.map { sid in
+                                    { onKillSession?(slot.cwd, sid) }
+                                },
+                                wsConnected: slot.sessionId.map { wsConnected.contains($0) } ?? false
+                            )
+                        }
+                    }
+                }
+
+                // Overflow sessions (matched team cwd but no role slot)
+                if teamState.overflowCount > 0 {
+                    HStack(spacing: 8) {
+                        ForEach(teamState.overflowSessionIds, id: \.self) { sid in
+                            if let snap = sessions[sid] {
+                                AgentCardView(
+                                    snapshot: snap,
+                                    filePath: sessionFilePaths[sid],
+                                    cwd: sessionCwds[sid],
+                                    gitBranch: sessionBranches[sid],
+                                    isExpanded: expandedSessionId == sid,
+                                    onTap: {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                            expandedSessionId = expandedSessionId == sid ? nil : sid
+                                        }
+                                    },
+                                    onKill: { onKillSession?(sessionCwds[sid], sid) }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -78,8 +104,11 @@ struct TeamSectionView: View {
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .foregroundStyle(isPopover ? Color.primary : Color.white)
 
-                    if teamState.activeCount > 0 {
-                        Text("\(teamState.activeCount) active")
+                    if teamState.activeCount > 0 || teamState.overflowCount > 0 {
+                        let label = teamState.activeCount > 0
+                            ? "\(teamState.activeCount) active" + (teamState.overflowCount > 0 ? " +\(teamState.overflowCount)" : "")
+                            : "+\(teamState.overflowCount)"
+                        Text(label)
                             .font(.system(size: 8, weight: .semibold, design: .monospaced))
                             .foregroundStyle(team.resolvedColor)
                             .padding(.horizontal, 6)

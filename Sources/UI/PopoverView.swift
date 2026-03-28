@@ -302,6 +302,7 @@ struct PopoverView: View {
                 ForEach(appState.teamStates) { team in
                     TeamSectionView(
                         teamState: team,
+                        sessions: appState.metricsEngine.sessions,
                         sessionCwds: appState.sessionCwds,
                         sessionBranches: appState.sessionBranches,
                         sessionFilePaths: appState.sessionFilePaths,

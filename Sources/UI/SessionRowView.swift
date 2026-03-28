@@ -113,13 +113,21 @@ struct PillarInfo {
 
     static let home = PillarInfo(name: "Home", color: Color(hex: "#4A9EFF"), shortName: "~")
 
-    private static let knownPillars: [(pathContains: String, info: PillarInfo)] = [
-        ("btc_predictions",     PillarInfo(name: "BTC Bot",    color: Color(hex: "#00d4aa"), shortName: "BT")),
-        ("projects/aurahome",   PillarInfo(name: "AuraHome",   color: Color(hex: "#FFD700"), shortName: "AH")),
-        ("Astra Digital",       PillarInfo(name: "Astra",      color: Color(hex: "#4A9EFF"), shortName: "AD")),
-        ("claude_voice",        PillarInfo(name: "Astra OS",   color: Color(hex: "#A855F7"), shortName: "OS")),
-        ("projects/InkPulse",   PillarInfo(name: "InkPulse",   color: Color(hex: "#00d4aa"), shortName: "IP")),
-    ]
+    /// Team-based pillar lookup — reads from teams.json at runtime, no hardcoded projects.
+    private static func teamPillar(for cwd: String) -> PillarInfo? {
+        let teams = TeamsLoader.load()
+        for team in teams {
+            let resolved = team.resolvedCwd
+            if cwd == resolved || cwd.hasPrefix(resolved + "/") {
+                return PillarInfo(
+                    name: team.name,
+                    color: team.resolvedColor,
+                    shortName: String(team.name.prefix(2).uppercased())
+                )
+            }
+        }
+        return nil
+    }
 
     /// Derives project identity from the working directory path.
     /// Checks config overrides first, then known pillars, then inferred project from tool paths,
@@ -141,11 +149,9 @@ struct PillarInfo {
             }
         }
 
-        // Known pillars
-        for pillar in knownPillars {
-            if cwd.contains(pillar.pathContains) {
-                return pillar.info
-            }
+        // Team-based lookup (from teams.json)
+        if let team = teamPillar(for: cwd) {
+            return team
         }
 
         // Project inference from tool paths (when cwd is Home)

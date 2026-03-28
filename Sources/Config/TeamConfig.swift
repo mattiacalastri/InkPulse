@@ -12,8 +12,11 @@ struct TeamConfig: Codable, Identifiable {
 
     var resolvedColor: Color { Color(hex: color) }
 
-    /// Expands ~ to home directory.
+    /// Expands ~ to home directory (handles both "~" and "~/subpath").
     var resolvedCwd: String {
+        if cwd == "~" {
+            return FileManager.default.homeDirectoryForCurrentUser.path
+        }
         if cwd.hasPrefix("~/") {
             return FileManager.default.homeDirectoryForCurrentUser.path
                 + String(cwd.dropFirst(1))
@@ -35,6 +38,10 @@ struct TeamState: Identifiable {
     let id: String
     let config: TeamConfig
     var slots: [RoleSlot]
+    /// Sessions that match this team's cwd but exceed the number of defined roles.
+    var overflowSessionIds: [String] = []
+
+    var overflowCount: Int { overflowSessionIds.count }
 
     /// Number of truly active role slots (had events in last 2 min).
     var activeCount: Int {
@@ -53,6 +60,9 @@ struct TeamState: Identifiable {
         guard !occupied.isEmpty else { return -1 }
         return occupied.reduce(0, +) / occupied.count
     }
+
+    /// True if this is the auto-generated Workspace team.
+    var isWorkspace: Bool { id == "__workspace__" }
 }
 
 struct RoleSlot: Identifiable {
@@ -165,10 +175,34 @@ enum TeamsLoader {
                 }
             }
 
-            teamStates.append(TeamState(id: team.id, config: team, slots: slots))
+            // Track overflow: sessions that match but have no role slot
+            let overflowIds = Array(availableIds.subtracting(matchedSessionIds)).sorted()
+            matchedSessionIds.formUnion(overflowIds)
+
+            teamStates.append(TeamState(id: team.id, config: team, slots: slots, overflowSessionIds: overflowIds))
         }
 
-        let unmatchedIds = sessions.keys.filter { !matchedSessionIds.contains($0) }.sorted()
+        var unmatchedIds = sessions.keys.filter { !matchedSessionIds.contains($0) }.sorted()
+
+        // Auto-generate Workspace team for home-dir sessions that don't match any team
+        if !teams.isEmpty {
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            let workspaceIds = unmatchedIds.filter { sid in
+                guard let cwd = sessionCwds[sid] else { return false }
+                return cwd == home
+            }
+            if !workspaceIds.isEmpty {
+                let workspaceConfig = TeamConfig(
+                    id: "__workspace__", name: "Workspace",
+                    cwd: home, color: "#607D8B", roles: []
+                )
+                unmatchedIds.removeAll { workspaceIds.contains($0) }
+                teamStates.append(TeamState(
+                    id: "__workspace__", config: workspaceConfig,
+                    slots: [], overflowSessionIds: workspaceIds
+                ))
+            }
+        }
         return (teamStates, unmatchedIds)
     }
 }

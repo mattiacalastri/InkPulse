@@ -5,25 +5,14 @@ struct MenuBarView: View {
 
     @State private var isPulsing = false
 
-    private var snaps: [MetricsSnapshot] {
-        Array(appState.metricsEngine.sessions.values)
-    }
-
-    private var health: Int {
-        appState.metricsEngine.aggregateHealth
-    }
+    // Read from top-level @Published on AppState (not nested metricsEngine)
+    // so MenuBarExtra label actually refreshes.
+    private var health: Int { appState.menuBarHealth }
+    private var avgTokenMin: Double { appState.menuBarTokenMin }
+    private var totalCost: Double { appState.menuBarCost }
 
     private var anomaly: Anomaly? {
         appState.metricsEngine.primaryAnomaly
-    }
-
-    private var avgTokenMin: Double {
-        guard !snaps.isEmpty else { return 0 }
-        return snaps.map(\.tokenMin).reduce(0, +) / Double(snaps.count)
-    }
-
-    private var totalCost: Double {
-        snaps.map(\.costEUR).reduce(0, +)
     }
 
     private var healthColor_: Color {
@@ -42,7 +31,7 @@ struct MenuBarView: View {
     }
 
     private var pulseFrequency: Double {
-        guard !snaps.isEmpty else { return 2.0 }
+        guard avgTokenMin > 0 else { return 2.0 }
         return min(max(avgTokenMin / 333.0, 0.5), 3.0)
     }
 

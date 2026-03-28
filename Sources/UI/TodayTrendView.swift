@@ -501,7 +501,7 @@ struct TodayTrendView: View {
             costs[pillar, default: 0] = max(costs[pillar, default: 0], rec.costEur)
         }
         return costs.map { name, cost in
-            let color = PillarInfo.from(cwd: pillarCwdHint(name)).color
+            let color = pillarColor(name)
             return (name: name, cost: cost, color: color)
         }
         .sorted { $0.cost > $1.cost }
@@ -571,18 +571,20 @@ struct TodayTrendView: View {
         }
     }
 
-    /// Reverse-map pillar name to a fake cwd for color lookup.
-    private func pillarCwdHint(_ name: String) -> String? {
-        switch name {
-        case "BTC Bot": return "/btc_predictions"
-        case "AuraHome": return "/aurahome"
-        case "Astra": return "/Astra Digital"
-        case "Brand OS": return "/claude_voice"
-        case "InkPulse": return "/InkPulse"
-        case "Tentacolo": return "/tentacolo"
-        case "Guccione": return "/guccione"
-        case "LuxGuard": return "/luxguard"
-        default: return nil
+    /// Map pillar name to color — reads from teams.json, falls back to config overrides, then hash-based color.
+    private func pillarColor(_ name: String) -> Color {
+        // Check team configs first
+        for team in TeamsLoader.load() {
+            if team.name == name { return team.resolvedColor }
         }
+        // Check pillar overrides from config
+        let config = ConfigLoader.load()
+        for (_, override) in config.pillarOverrides {
+            if override.name == name { return Color(hex: override.color) }
+        }
+        // Deterministic color from name hash
+        let hash = abs(name.hashValue)
+        let palette = ["#00d4aa", "#FFD700", "#4A9EFF", "#A855F7", "#FF6B35", "#FF4444", "#2ECC71", "#E74C3C"]
+        return Color(hex: palette[hash % palette.count])
     }
 }
