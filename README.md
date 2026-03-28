@@ -1,61 +1,87 @@
-# InkPulse
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-14%2B-blue?style=flat-square" alt="macOS 14+">
+  <img src="https://img.shields.io/badge/Swift-5.9-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 5.9">
+  <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies">
+  <img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="License">
+  <img src="https://img.shields.io/github/stars/mattiacalastri/InkPulse?style=flat-square" alt="GitHub Stars">
+</p>
 
-**Control Plane for AI Agent Teams** — a native macOS app that monitors, organizes, and orchestrates Claude Code sessions in real-time.
+<h1 align="center">InkPulse</h1>
+<p align="center"><strong>The missing control plane for Claude Code.</strong><br>Monitor, organize, and orchestrate AI agent teams from your macOS menu bar.</p>
 
-![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue) ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange) ![License Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green)
+<p align="center">
+  <em>One developer. Multiple agents. Full visibility.</em>
+</p>
+
+<!-- TODO: Replace with actual demo GIF -->
+<!-- <p align="center"><img src="docs/demo.gif" width="720" alt="InkPulse Demo"></p> -->
+
+---
 
 ## The Problem
 
-Claude Code is built for 1 developer, 1 project, 1 terminal. Power users running 8-15 sessions across multiple projects face:
+Claude Code runs one session per terminal. Power users running **8-15 sessions** across multiple projects hit a wall:
 
-- **No team structure** — flat list of sessions with no logical grouping
-- **No orchestration** — can't spawn or coordinate sessions from a central point
-- **No inter-session awareness** — each session is an island
-- **Cognitive overload** — tab-switching across 15 terminals is unsustainable
+- **No team structure** — a flat list of terminals with no logical grouping
+- **No orchestration** — can't spawn or coordinate sessions from one place
+- **No visibility** — cost, token usage, and anomalies are invisible
+- **Cognitive overload** — tab-switching across 15 terminals kills focus
 
-InkPulse solves this.
+InkPulse gives you a **bird's-eye view** of everything your AI agents are doing — and lets you control them.
 
 ## What It Does
 
 ### Team Org Chart
-Sessions grouped into teams with named roles. No more flat lists.
+Group sessions into teams with named roles. Each team maps to a project directory.
 
 ```
-Bot Team [~/btc_predictions]
+Backend Team [~/projects/my-api]
   PM         — roadmap, priorities
   Dev        — code, deploy, debug
-  Researcher — R&D, experiments
+  Reviewer   — code review, quality
 
-AuraHome Team [~/projects/aurahome]
-  PM         — product roadmap
-  Dev        — WP/WooCommerce
-  Content    — SEO, copy, i18n
+Frontend Team [~/projects/web-app]
+  Designer   — UI/UX implementation
+  Dev        — components, state
+  Tester     — e2e, accessibility
 ```
 
 ### One-Click Spawn
-Click **Spawn** on a team and InkPulse opens Terminal windows for each role, running Claude Code with the role prompt injected. Agents start working immediately.
+Click **Spawn** on any team — InkPulse opens Terminal windows for each role with the correct working directory and role prompt injected. Agents start working immediately.
 
 ### Real-Time Health Monitoring
-8 metrics tracked per session with sliding windows:
+8 metrics per session, computed with sliding windows:
 
 | Metric | What it measures |
 |--------|-----------------|
-| tok/min | Token throughput (60s window) |
-| Cache hit | Cache read vs total input ratio |
-| Error rate | Failed tool calls (5min window) |
-| Cost | Running session cost in EUR |
-| Context % | Context window utilization |
-| Subagents | Spawned agent count |
-| Think:Output | Reasoning vs output ratio |
-| Idle gaps | Pause time between events |
+| **tok/min** | Token throughput (60s window) |
+| **Cache hit** | Cache read vs total input ratio |
+| **Error rate** | Failed tool calls (5min window) |
+| **Cost** | Running session cost |
+| **Context %** | Context window utilization |
+| **Subagents** | Spawned agent count |
+| **Think:Output** | Reasoning vs output ratio |
+| **Idle gaps** | Pause time between events |
 
-### Smart Notifications
-macOS alerts for deploy completion, error spikes, idle agents burning credits.
+### Anomaly Detection
+**AnomalyWatcher** catches problems before they burn your credits:
+
+- **Hemorrhage** — cost increasing too fast
+- **Explosion** — token output out of scale
+- **Loop** — repetitive tool call patterns
+
+Native macOS notifications with sound alerts. Cooldown logic prevents alert fatigue.
+
+### Smart Project Inference
+When working from `~/`, InkPulse analyzes file paths in tool calls to infer the **actual project** you're working on. No manual tagging required.
+
+### Daily Cost Budget
+Set a daily spending limit. Progress bar in the UI. Alert when you're close to the cap. **The AI that regulates its own spending.**
 
 ### WebSocket Control Channel
-Bidirectional communication between InkPulse and Claude Code sessions on `localhost:9998`. Send tasks to specific agents programmatically.
+Bidirectional communication on `localhost:9998`. Send tasks to specific agents programmatically. Build your own automation on top.
 
-## Installation
+## Quick Start
 
 ```bash
 git clone https://github.com/mattiacalastri/InkPulse.git
@@ -66,14 +92,14 @@ swift build -c release
 ### Install to Applications
 
 ```bash
-cp -f .build/release/InkPulse /Applications/InkPulse.app/Contents/MacOS/InkPulse
+cp -rf .build/release/InkPulse.app /Applications/
 open /Applications/InkPulse.app
 ```
 
 ### Requirements
 
 - macOS 14.0 Sonoma or later
-- Claude Code installed (`~/.claude/projects/` must exist)
+- Claude Code installed
 - Swift 5.9+ (Xcode 15+)
 
 ## Configuration
@@ -113,48 +139,76 @@ open /Applications/InkPulse.app
 }
 ```
 
-Each team maps to a working directory. Roles define the prompts injected when spawning agents.
-
 ### Settings (`~/.inkpulse/config.json`)
 
-Optional overrides for refresh rate, session timeout, health score weights, daily budget alerts, and pillar color overrides.
+Override refresh rate, session timeout, health score weights, daily budget alerts, and pillar color mappings.
 
 ## Architecture
 
 ```
-InkPulse.app (Swift, single binary)
-  UI Layer (SwiftUI)           WebSocket Server (Network.framework, :9998)
-    Team Org Chart               Session Registry
-    Role Cards                   Command Dispatch
-    Spawn Buttons                Status Receive
+InkPulse.app — pure Swift, zero external dependencies
 
-  JSONL Monitor                Notifications
-    File Tailer                  EventDetector (deploy, errors, idle)
-    Metrics Engine               AnomalyWatcher (stall, loop, hemorrhage)
-    Health + EGI Score           macOS UNUserNotificationCenter
+┌─────────────────────────────────────────────────────┐
+│  UI Layer (SwiftUI)          Control Layer           │
+│  ├── Team Org Chart          ├── WebSocket :9998     │
+│  ├── Role Cards              ├── Session Registry    │
+│  ├── Spawn Buttons           ├── Command Dispatch    │
+│  ├── Live/Trends/Reports     └── Status Receive      │
+│  └── Daily Cost Budget                               │
+│                                                      │
+│  Intelligence Layer          Notification Layer       │
+│  ├── JSONL File Tailer       ├── EventDetector       │
+│  ├── MetricsEngine (8 KPI)   ├── AnomalyWatcher      │
+│  ├── Health + EGI Score      └── macOS Notifications  │
+│  └── Project Inference                               │
+└─────────────────────────────────────────────────────┘
 ```
 
-Zero dependencies. Everything is built with Apple frameworks.
+**Read-only** — InkPulse never modifies your Claude Code files or sessions.
 
 ## How It Works
 
-1. InkPulse watches `~/.claude/projects/` for JSONL log files
-2. Parses events, computes 8 health metrics per session with sliding windows
+1. Watches `~/.claude/projects/` for JSONL session logs
+2. Parses events in real-time, computes health metrics with sliding windows
 3. Matches sessions to team roles by working directory
-4. Shows live org chart in menu bar popover + full window dashboard
+4. Displays live org chart in menu bar popover + full dashboard
 5. Spawn opens Terminal.app windows with `claude "<role prompt>"`
-6. WebSocket server enables bidirectional control
-
-**Read-only** — InkPulse never modifies Claude Code files.
+6. WebSocket server enables external automation
 
 ## Roadmap
 
 - [x] Team org chart with collapsible sections
 - [x] One-click spawn with role prompts
 - [x] WebSocket control channel
-- [x] Smart event notifications
-- [ ] MCP Hub — shared MCP server pool (N*M processes -> M+1)
+- [x] Smart event notifications + anomaly detection
+- [x] Daily cost budget with alerts
+- [x] Project inference from file paths
+- [x] Session kill with confirmation
+- [ ] MCP Hub — shared MCP server pool across agents
 - [ ] Send Task UI — dispatch prompts to agents from dashboard
+- [ ] macOS widget for daily cost
+- [ ] Cross-session data export
+
+## Why InkPulse?
+
+| | Without InkPulse | With InkPulse |
+|---|---|---|
+| **Visibility** | Check each terminal manually | One dashboard, all agents |
+| **Cost control** | Surprise bills | Daily budget + anomaly alerts |
+| **Organization** | Flat terminal list | Teams with roles and prompts |
+| **Spawning** | Open terminal, cd, type prompt | One click |
+| **Problems** | Notice when it's too late | Real-time anomaly detection |
+
+## Contributing
+
+Contributions are welcome. Check out the [open issues](https://github.com/mattiacalastri/InkPulse/issues) for things to work on.
+
+```bash
+git clone https://github.com/mattiacalastri/InkPulse.git
+cd InkPulse
+swift build
+swift test
+```
 
 ## License
 
