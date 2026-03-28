@@ -566,7 +566,7 @@ struct LiveTab: View {
 
     private var footer: some View {
         HStack {
-            Text("v2.1.0 · InkPulse")
+            Text("v2.2.0 · InkPulse")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.25))
             Spacer()
