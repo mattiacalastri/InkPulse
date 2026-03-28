@@ -89,4 +89,22 @@ struct DashboardStats {
         guard budget > 0 else { return nil }
         return totalCost / budget
     }
+
+    // MARK: - Tool Breakdown
+
+    /// Aggregate tool counts across all active sessions, sorted by count descending.
+    var toolBreakdown: [(name: String, count: Int)] {
+        var merged: [String: Int] = [:]
+        for snap in snaps {
+            for (name, count) in snap.toolCounts {
+                merged[name, default: 0] += count
+            }
+        }
+        return merged.sorted { $0.value > $1.value }.map { (name: $0.key, count: $0.value) }
+    }
+
+    /// Total tool invocations across all sessions.
+    var totalToolCount: Int {
+        toolBreakdown.reduce(0) { $0 + $1.count }
+    }
 }

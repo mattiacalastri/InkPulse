@@ -117,6 +117,11 @@ struct PopoverView: View {
             .padding(.horizontal, 12).padding(.vertical, 6)
             .background(Color.primary.opacity(0.03))
 
+            // ── TOOL BREAKDOWN ──
+            if !stats.toolBreakdown.isEmpty {
+                toolBreakdownStrip
+            }
+
             // ── ECG ──
             if !appState.tokenHistory.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
@@ -244,6 +249,49 @@ struct PopoverView: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(.trailing, 8)
+    }
+
+    // MARK: - Tool Breakdown
+
+    private var toolBreakdownStrip: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Tools")
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(stats.totalToolCount) total")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+            HStack(spacing: 0) {
+                let top = Array(stats.toolBreakdown.prefix(6))
+                ForEach(Array(top.enumerated()), id: \.offset) { idx, entry in
+                    if idx > 0 {
+                        Text(" · ")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                    }
+                    Text("\(entry.name):\(entry.count)")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(toolColor(for: entry.name))
+                }
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 4)
+        .background(Color.primary.opacity(0.03))
+    }
+
+    private func toolColor(for name: String) -> Color {
+        switch name {
+        case "Read": return Color(hex: "#4A9EFF")
+        case "Edit", "Write": return Color(hex: "#00d4aa")
+        case "Bash": return Color(hex: "#FFA500")
+        case "Grep", "Glob": return Color(hex: "#B388FF")
+        case "Agent": return Color(hex: "#FF6B9D")
+        default: return .secondary
+        }
     }
 
     // MARK: - Team Agent List

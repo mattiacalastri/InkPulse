@@ -34,6 +34,9 @@ struct MetricsSnapshot {
 
     // Project inference (when cwd is Home)
     let inferredProject: String?
+
+    // Cumulative tool invocation counts by name
+    let toolCounts: [String: Int]
 }
 
 // MARK: - MetricsEngine

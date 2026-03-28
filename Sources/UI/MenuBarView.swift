@@ -5,6 +5,10 @@ struct MenuBarView: View {
 
     @State private var isPulsing = false
 
+    private var snaps: [MetricsSnapshot] {
+        Array(appState.metricsEngine.sessions.values)
+    }
+
     private var health: Int {
         appState.metricsEngine.aggregateHealth
     }
@@ -13,24 +17,16 @@ struct MenuBarView: View {
         appState.metricsEngine.primaryAnomaly
     }
 
-    private var iconName: String {
-        if health < 0 {
-            return "circle"
-        }
-        if let anomaly = anomaly {
-            switch anomaly {
-            case .deepThinking:
-                return "diamond.fill"
-            case .stall, .loop:
-                return "exclamationmark.triangle.fill"
-            case .hemorrhage, .explosion:
-                return "exclamationmark.triangle.fill"
-            }
-        }
-        return "circle.fill"
+    private var avgTokenMin: Double {
+        guard !snaps.isEmpty else { return 0 }
+        return snaps.map(\.tokenMin).reduce(0, +) / Double(snaps.count)
     }
 
-    private var iconColor: Color {
+    private var totalCost: Double {
+        snaps.map(\.costEUR).reduce(0, +)
+    }
+
+    private var healthColor_: Color {
         if health < 0 {
             return Color(hex: "#666666")
         }
@@ -46,26 +42,50 @@ struct MenuBarView: View {
     }
 
     private var pulseFrequency: Double {
-        // Base frequency derived from average token/min across sessions
-        let snaps = Array(appState.metricsEngine.sessions.values)
         guard !snaps.isEmpty else { return 2.0 }
-        let avgTokenMin = snaps.map(\.tokenMin).reduce(0, +) / Double(snaps.count)
-        // Map 0-1000 tok/min to 0.5-3.0 Hz
         return min(max(avgTokenMin / 333.0, 0.5), 3.0)
     }
 
     var body: some View {
-        Image(systemName: iconName)
-            .foregroundStyle(iconColor)
-            .scaleEffect(isPulsing ? 1.2 : 1.0)
-            .animation(
-                health >= 0
-                    ? .easeInOut(duration: 1.0 / pulseFrequency).repeatForever(autoreverses: true)
-                    : .default,
-                value: isPulsing
-            )
-            .onAppear {
-                isPulsing = true
+        HStack(spacing: 4) {
+            Text("\u{1F419}")
+                .font(.system(size: 12))
+
+            if health >= 0 {
+                // Health
+                Text("\(health)")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(healthColor_)
+                    .opacity(isPulsing ? 1.0 : 0.7)
+                    .animation(
+                        .easeInOut(duration: 1.0 / pulseFrequency).repeatForever(autoreverses: true),
+                        value: isPulsing
+                    )
+
+                Text("·")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+
+                // tok/min
+                Text("\(Int(avgTokenMin))t")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+
+                Text("·")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+
+                // Cost
+                Text(String(format: "€%.2f", totalCost))
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
             }
+        }
+        .onAppear {
+            isPulsing = true
+        }
     }
 }

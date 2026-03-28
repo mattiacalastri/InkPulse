@@ -22,6 +22,9 @@ final class SessionMetrics {
     /// Timestamped tool names for diversity/domain tracking (EGI).
     private var toolNameEvents: [(date: Date, name: String)] = []
 
+    /// Cumulative tool invocation counts by name.
+    private var toolCountsByName: [String: Int] = [:]
+
     /// EGI state tracker.
     private(set) var egiTracker = EGITracker()
 
@@ -101,6 +104,9 @@ final class SessionMetrics {
                 + msg.usage.cacheCreationInputTokens
 
             // Last tool name + target from tool_use content blocks (Feature 2)
+            for tool in msg.toolUses {
+                toolCountsByName[tool.name, default: 0] += 1
+            }
             if let lastTool = msg.toolUses.last {
                 lastToolName = lastTool.name
                 lastToolTarget = lastTool.target
@@ -161,6 +167,7 @@ final class SessionMetrics {
                 toolEvents.append((date: timestamp, isError: isError))
                 if let name = toolName {
                     toolNameEvents.append((date: timestamp, name: name))
+                    toolCountsByName[name, default: 0] += 1
                     lastToolName = name
                 }
             }
@@ -384,7 +391,8 @@ final class SessionMetrics {
             lastToolName: lastToolName,
             lastToolTarget: lastToolTarget,
             activeTaskName: activeTaskName,
-            inferredProject: inferredProject
+            inferredProject: inferredProject,
+            toolCounts: toolCountsByName
         )
     }
 }
