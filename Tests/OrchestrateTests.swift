@@ -48,4 +48,42 @@ final class OrchestrateTests: XCTestCase {
 
         XCTAssertThrowsError(try JSONDecoder().decode(MissionsFile.self, from: json))
     }
+
+    // MARK: - MissionsWatcher
+
+    func testMissionsWatcherReadsFile() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("inkpulse-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let missionsPath = tmpDir.appendingPathComponent("missions.json")
+
+        let expectation = XCTestExpectation(description: "missions loaded")
+        var receivedFile: MissionsFile?
+
+        let watcher = MissionsWatcher(directory: tmpDir) { file in
+            receivedFile = file
+            expectation.fulfill()
+        }
+        watcher.start()
+
+        // Write a valid missions file
+        let json = """
+        {
+          "generated": "2026-03-28T14:30:00Z",
+          "reasoning": "Test run",
+          "missions": [
+            {"id": "m1", "name": "Test", "cwd": "~", "icon": "star", "prompt": "Do test"}
+          ]
+        }
+        """.data(using: .utf8)!
+        try json.write(to: missionsPath)
+
+        wait(for: [expectation], timeout: 5.0)
+        watcher.stop()
+
+        XCTAssertNotNil(receivedFile)
+        XCTAssertEqual(receivedFile?.missions.count, 1)
+    }
 }
