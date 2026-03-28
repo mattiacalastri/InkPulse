@@ -13,8 +13,7 @@
   <em>One developer. Multiple agents. Full visibility.</em>
 </p>
 
-<!-- TODO: Replace with actual demo GIF -->
-<!-- <p align="center"><img src="docs/demo.gif" width="720" alt="InkPulse Demo"></p> -->
+<p align="center"><img src="docs/hero.png" width="720" alt="InkPulse Dashboard"></p>
 
 ---
 
