@@ -153,15 +153,12 @@ struct ConfigView: View {
                         Text("🐙")
                             .font(.title)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("InkPulse v2.0.0")
+                            Text("InkPulse v2.1.0")
                                 .font(.system(.caption, design: .rounded))
                                 .fontWeight(.bold)
                             Text("Control Plane for AI Agent Teams")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
-                            Text("by Mattia Calastri")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
                         }
                     }
 

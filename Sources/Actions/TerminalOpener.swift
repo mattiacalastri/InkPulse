@@ -11,7 +11,7 @@ enum TerminalOpener {
     ///   3. Fallback: just activate Terminal
     static func open(cwd: String) {
         // Extract meaningful identifier from cwd for title matching
-        // e.g. ~/btc_predictions -> "btc_predictions", ~/projects/aurahome -> "aurahome"
+        // e.g. ~/my-project -> "my-project", ~/work/webapp -> "webapp"
         let cwdName = URL(fileURLWithPath: cwd).lastPathComponent
 
         let script = """
