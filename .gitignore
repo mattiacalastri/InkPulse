@@ -11,3 +11,5 @@
 DerivedData/
 Packages/
 xcuserdata/
+.superpowers/
+.firecrawl/
