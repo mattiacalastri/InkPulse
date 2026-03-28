@@ -18,6 +18,12 @@ final class AppState: ObservableObject {
     @Published var teamStates: [TeamState] = []
     @Published var unmatchedSessionIds: [String] = []
 
+    // MARK: - Orchestrate State
+    @Published var orchestratePhase: OrchestratePhase = .idle
+    @Published var orchestrateMissions: MissionsFile?
+    private var missionsWatcher: MissionsWatcher?
+    private var orchestrateTimeout: Timer?
+
     private var heartbeatLogger: HeartbeatLogger?
     private var sessionWatcher: SessionWatcher?
     private var refreshTimer: Timer?
@@ -293,6 +299,87 @@ final class AppState: ObservableObject {
                 body: "\(team.name)/\(role.name) is now running"
             )
         }
+    }
+
+    // MARK: - Orchestrate
+
+    func orchestrate() {
+        guard orchestratePhase == .idle || orchestratePhase.isFailed else {
+            AppState.log("Orchestrate: already running, ignoring")
+            return
+        }
+
+        // Clean up any previous missions file
+        let missionsPath = InkPulseDefaults.inkpulseDir.appendingPathComponent("missions.json")
+        try? FileManager.default.removeItem(at: missionsPath)
+
+        orchestratePhase = .thinking
+        orchestrateMissions = nil
+
+        // Start watching for missions.json
+        missionsWatcher?.stop()
+        missionsWatcher = MissionsWatcher(directory: InkPulseDefaults.inkpulseDir) { [weak self] file in
+            Task { @MainActor in
+                self?.onMissionsReady(file)
+            }
+        }
+        missionsWatcher?.start()
+
+        // Spawn orchestrator
+        let success = OrchestrateSpawner.spawnOrchestrator()
+        if !success {
+            orchestratePhase = .failed("Failed to spawn orchestrator Terminal")
+            missionsWatcher?.stop()
+            return
+        }
+
+        // Timeout: 120s
+        orchestrateTimeout?.invalidate()
+        orchestrateTimeout = Timer.scheduledTimer(withTimeInterval: 120, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self, self.orchestratePhase == .thinking else { return }
+                self.orchestratePhase = .failed("Orchestrator did not produce missions in 120s")
+                self.missionsWatcher?.stop()
+                AppState.log("Orchestrate: timeout")
+            }
+        }
+
+        notificationManager.send(
+            title: "Orchestrator Spawned",
+            body: "The Polpo is reading the garden..."
+        )
+        AppState.log("Orchestrate: started, waiting for missions.json")
+    }
+
+    private func onMissionsReady(_ file: MissionsFile) {
+        orchestrateTimeout?.invalidate()
+        orchestrateMissions = file
+        AppState.log("Orchestrate: received \(file.missions.count) missions — \(file.reasoning.prefix(80))")
+
+        orchestratePhase = .spawning(0, file.missions.count)
+
+        let succeeded = OrchestrateSpawner.spawnMissions(file) { [weak self] completed, total in
+            self?.orchestratePhase = .spawning(completed, total)
+        }
+
+        orchestratePhase = .active
+        missionsWatcher?.cleanup()
+        missionsWatcher?.stop()
+
+        notificationManager.send(
+            title: "Orchestration Active",
+            body: "\(succeeded)/\(file.missions.count) agents spawned. Reasoning: \(file.reasoning.prefix(60))..."
+        )
+        AppState.log("Orchestrate: active — \(succeeded)/\(file.missions.count) agents")
+    }
+
+    func stopOrchestrate() {
+        orchestratePhase = .idle
+        orchestrateMissions = nil
+        orchestrateTimeout?.invalidate()
+        missionsWatcher?.cleanup()
+        missionsWatcher?.stop()
+        AppState.log("Orchestrate: stopped")
     }
 
     func killSession(cwd: String?, sessionId: String) {
