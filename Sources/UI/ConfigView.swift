@@ -9,6 +9,9 @@ struct ConfigView: View {
     @AppStorage("inkpulse_tail_kb") private var tailKB: Double = 500.0
     @AppStorage("inkpulse_daily_budget") private var dailyBudget: Double = 0.0
     @AppStorage("inkpulse_sound_anomaly") private var soundOnAnomaly: Bool = true
+    @State private var showingWizard = false
+
+    private var hasTeams: Bool { !appState.teamConfigs.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -99,6 +102,32 @@ struct ConfigView: View {
 
                     Divider().padding(.vertical, 4)
 
+                    // ── TEAMS ──
+                    sectionHeader("Teams")
+
+                    Button(action: { showingWizard = true }) {
+                        Label(hasTeams ? "Edit Teams" : "Setup Teams",
+                              systemImage: hasTeams ? "pencil.circle.fill" : "sparkles")
+                            .font(.system(.caption, design: .rounded))
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(hasTeams ? .secondary : Color(hex: "#00d4aa"))
+                    .controlSize(.regular)
+
+                    if hasTeams {
+                        Text("\(appState.teamConfigs.count) teams configured")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                    } else {
+                        Text("Organize your Claude Code sessions into teams with one click.")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Divider().padding(.vertical, 4)
+
                     // ── INFO ──
                     sectionHeader("About")
 
@@ -143,6 +172,9 @@ struct ConfigView: View {
             }
         }
         .frame(width: 560)
+        .sheet(isPresented: $showingWizard) {
+            SetupWizardView(appState: appState, isPresented: $showingWizard)
+        }
     }
 
     // MARK: - Components
