@@ -112,14 +112,39 @@ final class MetricsTests: XCTestCase {
     func testSubagentTracking() {
         let session = SessionMetrics(sessionId: sid, startTime: baseDate)
 
-        session.ingest(makeQueueEvent(operation: "enqueue", at: 5))
-        session.ingest(makeQueueEvent(operation: "enqueue", at: 10))
-        session.ingest(makeQueueEvent(operation: "complete", at: 15))
+        // Subagents are now tracked via Agent tool uses in assistant messages
+        session.ingest(makeAssistantEventWithAgentTool(at: 5))
+        session.ingest(makeAssistantEventWithAgentTool(at: 10))
 
         let snap = session.snapshot(at: baseDate.addingTimeInterval(20))
 
-        XCTAssertEqual(snap.subagentCount, 1,
-                       "Expected 1 active subagent (2 enqueued - 1 completed), got \(snap.subagentCount)")
+        XCTAssertEqual(snap.subagentCount, 2,
+                       "Expected 2 subagents (2 Agent tool uses), got \(snap.subagentCount)")
+    }
+
+    private func makeAssistantEventWithAgentTool(at offset: TimeInterval) -> ClaudeEvent {
+        let agentTool = ToolUseInfo(
+            id: "tool-\(UUID().uuidString.prefix(4))",
+            name: "Agent",
+            target: "subagent-task",
+            fullPath: nil,
+            subject: nil
+        )
+        let usage = TokenUsage(
+            inputTokens: 100,
+            outputTokens: 50,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0
+        )
+        let msg = AssistantMessage(
+            model: "claude-sonnet-4",
+            usage: usage,
+            thinkingText: nil,
+            outputText: "spawning agent",
+            requestId: nil,
+            toolUses: [agentTool]
+        )
+        return .assistant(msg, timestamp: baseDate.addingTimeInterval(offset), sessionId: sid)
     }
 
     // MARK: - 5. testCostCalculation

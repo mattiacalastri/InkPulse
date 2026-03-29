@@ -2,30 +2,31 @@ import XCTest
 @testable import InkPulse
 
 final class PillarTests: XCTestCase {
-    func testKnownPillarBTCBot() {
+    // Dynamic pillar system: without teams.json/config, fallback is last path component capitalized.
+    func testFallbackPillarBTCPredictions() {
         let info = PillarInfo.from(cwd: "/Users/mattia/btc_predictions")
-        XCTAssertEqual(info.name, "BTC Bot")
+        XCTAssertEqual(info.name, "Btc_predictions")
         XCTAssertEqual(info.shortName, "BT")
     }
-    func testKnownPillarAuraHome() {
+    func testFallbackPillarAuraHome() {
         let info = PillarInfo.from(cwd: "/Users/mattia/projects/aurahome")
-        XCTAssertEqual(info.name, "AuraHome")
-        XCTAssertEqual(info.shortName, "AH")
+        XCTAssertEqual(info.name, "Aurahome")
+        XCTAssertEqual(info.shortName, "AU")
     }
-    func testKnownPillarAstraDigital() {
+    func testFallbackPillarAstraDigital() {
         let info = PillarInfo.from(cwd: "/Users/mattia/Downloads/Astra Digital Marketing")
-        XCTAssertEqual(info.name, "Astra")
-        XCTAssertEqual(info.shortName, "AD")
+        XCTAssertEqual(info.name, "Astra Digital Marketing")
+        XCTAssertEqual(info.shortName, "AS")
     }
-    func testKnownPillarAstraOS() {
+    func testFallbackPillarClaudeVoice() {
         let info = PillarInfo.from(cwd: "/Users/mattia/claude_voice")
-        XCTAssertEqual(info.name, "Astra OS")
-        XCTAssertEqual(info.shortName, "OS")
+        XCTAssertEqual(info.name, "Claude_voice")
+        XCTAssertEqual(info.shortName, "CL")
     }
-    func testKnownPillarInkPulse() {
+    func testFallbackPillarInkPulse() {
         let info = PillarInfo.from(cwd: "/Users/mattia/projects/InkPulse")
         XCTAssertEqual(info.name, "InkPulse")
-        XCTAssertEqual(info.shortName, "IP")
+        XCTAssertEqual(info.shortName, "IN")
     }
     func testUnknownDirFallsBack() {
         let info = PillarInfo.from(cwd: "/Users/mattia/projects/my-cool-app")
@@ -50,9 +51,10 @@ final class PillarTests: XCTestCase {
         XCTAssertEqual(info.shortName, "LU")
     }
 
-    func testInferredProjectIgnoredWhenCwdIsKnownPillar() {
+    func testInferredProjectIgnoredWhenCwdIsNonHome() {
+        // When cwd is not Home, inferredProject is ignored — fallback to last path component
         let info = PillarInfo.from(cwd: "/Users/mattia/btc_predictions", inferredProject: "SomeProject")
-        XCTAssertEqual(info.name, "BTC Bot")
+        XCTAssertEqual(info.name, "Btc_predictions")
     }
 
     func testInferredProjectIgnoredWhenCwdIsNotHome() {
