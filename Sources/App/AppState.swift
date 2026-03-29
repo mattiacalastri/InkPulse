@@ -343,8 +343,9 @@ final class AppState: ObservableObject {
         // Timeout: 120s
         orchestrateTimeout?.invalidate()
         orchestrateTimeout = Timer.scheduledTimer(withTimeInterval: 120, repeats: false) { [weak self] _ in
-            Task { @MainActor in
-                guard let self = self, self.orchestratePhase == .thinking else { return }
+            guard let strongSelf = self else { return }
+            Task { @MainActor [weak strongSelf] in
+                guard let self = strongSelf, self.orchestratePhase == .thinking else { return }
                 self.orchestratePhase = .failed("Orchestrator did not produce missions in 120s")
                 self.missionsWatcher?.stop()
                 AppState.log("Orchestrate: timeout")
