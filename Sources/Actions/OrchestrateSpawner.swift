@@ -125,6 +125,7 @@ enum OrchestrateSpawner {
                 return false
             }
             AppState.log("Orchestrator spawned")
+            TeamSpawner.autoAcceptByTitle(windowTitle)
             return true
         }
         return false

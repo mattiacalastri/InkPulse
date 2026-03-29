@@ -29,6 +29,7 @@ enum TeamSpawner {
 
     /// Spawns a single Terminal.app window for a role.
     /// Window runs: cd <cwd> && claude "<prompt>"
+    /// After spawn, auto-accepts Claude CLI prompts (MCP trust + folder trust).
     @MainActor
     @discardableResult
     static func spawnRole(_ role: RoleConfig, team: TeamConfig) -> Bool {
@@ -64,12 +65,115 @@ enum TeamSpawner {
             appleScript.executeAndReturnError(&error)
             if let error = error {
                 AppState.log("Spawn failed for \(team.name)/\(role.name): \(error)")
+                if isTCCDenied(error) {
+                    showTCCAlert()
+                    return false
+                }
                 return spawnFallback(role: role, team: team, cwd: cwd, windowTitle: windowTitle)
             }
             AppState.log("Spawned \(team.name)/\(role.name) in \(cwd)")
+            autoAccept(windowTitle: windowTitle)
             return true
         }
         return false
+    }
+
+    // MARK: - Auto-Accept Claude CLI Prompts
+
+    /// Sends Enter keystrokes to the spawned window after a delay to auto-accept
+    /// Claude CLI trust prompts (MCP server auth + folder trust).
+    /// Targets the window by its custom title to avoid hitting the wrong terminal.
+    static func autoAcceptByTitle(_ windowTitle: String) {
+        autoAccept(windowTitle: windowTitle)
+    }
+
+    private static func autoAccept(windowTitle: String) {
+        let asTitle = windowTitle.replacingOccurrences(of: "\"", with: "\\\"")
+
+        // Run in background to avoid blocking the spawn loop
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Wait for Claude CLI to start and show trust prompts
+            Thread.sleep(forTimeInterval: 4.0)
+
+            let script = """
+            tell application "Terminal"
+                repeat with w in every window
+                    try
+                        if custom title of w is "\(asTitle)" then
+                            set frontmost of w to true
+                            delay 0.3
+                            tell application "System Events"
+                                tell process "Terminal"
+                                    keystroke return
+                                end tell
+                            end tell
+                            delay 2.0
+                            tell application "System Events"
+                                tell process "Terminal"
+                                    keystroke return
+                                end tell
+                            end tell
+                            exit repeat
+                        end if
+                    end try
+                end repeat
+            end tell
+            """
+
+            if let appleScript = NSAppleScript(source: script) {
+                var error: NSDictionary?
+                appleScript.executeAndReturnError(&error)
+                if error != nil {
+                    AppState.log("Auto-accept failed for \(windowTitle) (non-critical)")
+                } else {
+                    AppState.log("Auto-accept sent for \(windowTitle)")
+                }
+            }
+        }
+    }
+
+    // MARK: - TCC Permission Detection
+
+    /// Checks if an AppleScript error indicates TCC (Automation) permission denial.
+    private static func isTCCDenied(_ error: NSDictionary) -> Bool {
+        // AppleScript error -1743 = "not allowed to send Apple events to Terminal"
+        if let code = error["NSAppleScriptErrorNumber"] as? Int, code == -1743 {
+            return true
+        }
+        if let msg = error["NSAppleScriptErrorMessage"] as? String,
+           msg.contains("not allowed") || msg.contains("not permitted") {
+            return true
+        }
+        return false
+    }
+
+    /// Shows a user-facing alert explaining how to grant Automation permission.
+    @MainActor
+    private static func showTCCAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Automation Permission Required"
+        alert.informativeText = """
+        InkPulse needs permission to control Terminal.app for spawning agents.
+
+        Go to: System Settings > Privacy & Security > Automation
+        Then enable "Terminal" under InkPulse.
+
+        If InkPulse doesn't appear, try running this in Terminal:
+        tccutil reset AppleEvents com.astradigital.inkpulse
+        """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Open System Settings")
+        alert.addButton(withTitle: "OK")
+
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            // Open Privacy & Security settings
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+
+        AppState.log("TCC permission denied — showed alert to user")
     }
 
     // MARK: - Fallback (if --prompt not supported)

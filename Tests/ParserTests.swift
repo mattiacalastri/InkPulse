@@ -167,6 +167,41 @@ final class ParserTests: XCTestCase {
         }
     }
 
+    // MARK: - Error Detection (false positive fix)
+
+    func testDetectErrorRealErrors() {
+        // Actual error messages should be detected
+        XCTAssertTrue(JSONLParser.detectError(in: "Error: file not found"))
+        XCTAssertTrue(JSONLParser.detectError(in: "Permission denied for /etc/shadow"))
+        XCTAssertTrue(JSONLParser.detectError(in: "Command failed with exit code 1"))
+        XCTAssertTrue(JSONLParser.detectError(in: "Request blocked by firewall"))
+        XCTAssertTrue(JSONLParser.detectError(in: "Build error in main.swift"))
+        XCTAssertTrue(JSONLParser.detectError(in: "FAILED to connect to server"))
+    }
+
+    func testDetectErrorFalsePositives() {
+        // Code containing "error" as variable/identifier should NOT trigger
+        XCTAssertFalse(JSONLParser.detectError(in: "let errorRate = 0.05"))
+        XCTAssertFalse(JSONLParser.detectError(in: "error_count: 0"))
+        XCTAssertFalse(JSONLParser.detectError(in: "isError: false"))
+        XCTAssertFalse(JSONLParser.detectError(in: "is_error: false"))
+        XCTAssertFalse(JSONLParser.detectError(in: "handleError(result)"))
+        XCTAssertFalse(JSONLParser.detectError(in: "onError callback registered"))
+        XCTAssertFalse(JSONLParser.detectError(in: "no error found"))
+        XCTAssertFalse(JSONLParser.detectError(in: "0 errors in build"))
+        XCTAssertFalse(JSONLParser.detectError(in: "errorHandler.swift"))
+        XCTAssertFalse(JSONLParser.detectError(in: "clearError() called"))
+    }
+
+    func testDetectErrorEmptyString() {
+        XCTAssertFalse(JSONLParser.detectError(in: ""))
+    }
+
+    func testDetectErrorNoKeywords() {
+        XCTAssertFalse(JSONLParser.detectError(in: "Build succeeded with 0 warnings"))
+        XCTAssertFalse(JSONLParser.detectError(in: "All tests passed"))
+    }
+
     // MARK: - 8. testParseAssistantWithoutThinking
 
     func testParseAssistantWithoutThinking() {

@@ -81,7 +81,7 @@ struct LiveTab: View {
                 Text("InkPulse")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
-                Text(appState.teamConfigs.isEmpty ? "Heartbeat Monitor for Claude Code" : "Control Plane for AI Agent Teams")
+                Text(appState.teamConfigs.isEmpty && !appState.hasDynamicTeams ? "Heartbeat Monitor for Claude Code" : "Control Plane for AI Agent Teams")
                     .font(.system(size: 13, design: .monospaced))
                     .foregroundStyle(Color(hex: "#00d4aa").opacity(0.7))
                 Text("\(stats.snaps.count) agents · \(Int(stats.uptimeMin))m uptime")
@@ -398,22 +398,23 @@ struct LiveTab: View {
                 Image(systemName: "person.3.fill")
                     .foregroundStyle(Color(hex: "#00d4aa"))
                     .font(.caption)
-                Text(appState.teamConfigs.isEmpty ? "ACTIVE AGENTS" : "TEAMS")
+                Text(appState.teamStates.isEmpty ? "ACTIVE AGENTS" : "TEAMS")
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.5))
                 Spacer()
-                if appState.teamConfigs.isEmpty {
-                    Text("\(stats.snaps.count) sessions")
+                let teamCount = appState.teamStates.count
+                if teamCount > 0 {
+                    Text("\(teamCount) groups \u{00B7} \(stats.snaps.count) sessions")
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.25))
                 } else {
-                    Text("\(appState.teamConfigs.count) teams \u{00B7} \(stats.snaps.count) sessions")
+                    Text("\(stats.snaps.count) sessions")
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.25))
                 }
             }
 
-            if appState.teamConfigs.isEmpty {
+            if appState.teamConfigs.isEmpty && !appState.hasDynamicTeams {
                 flatAgentsContent
             } else {
                 teamAgentsContent

@@ -40,29 +40,46 @@ struct TeamState: Identifiable {
     var slots: [RoleSlot]
     /// Sessions that match this team's cwd but exceed the number of defined roles.
     var overflowSessionIds: [String] = []
+    /// Snapshot lookup for overflow sessions (set by matching logic).
+    var overflowSnapshots: [String: MetricsSnapshot] = [:]
 
     var overflowCount: Int { overflowSessionIds.count }
 
-    /// Number of truly active role slots (had events in last 2 min).
+    /// Number of truly active sessions (slots + overflow, events in last 2 min).
     var activeCount: Int {
-        slots.filter { slot in
+        let slotActive = slots.filter { slot in
             guard let snap = slot.session else { return false }
             return Date().timeIntervalSince(snap.lastEventTime) < 120
         }.count
+        let overflowActive = overflowSnapshots.values.filter {
+            Date().timeIntervalSince($0.lastEventTime) < 120
+        }.count
+        return slotActive + overflowActive
     }
 
-    /// Total cost across all occupied slots.
-    var totalCost: Double { slots.compactMap { $0.session?.costEUR }.reduce(0, +) }
+    /// Total session count (occupied slots + overflow).
+    var totalSessions: Int {
+        slots.filter(\.isOccupied).count + overflowCount
+    }
 
-    /// Combined health (average of occupied slots, or -1 if none).
+    /// Total cost across all sessions (slots + overflow).
+    var totalCost: Double {
+        let slotCost = slots.compactMap { $0.session?.costEUR }.reduce(0, +)
+        let overflowCost = overflowSnapshots.values.map(\.costEUR).reduce(0, +)
+        return slotCost + overflowCost
+    }
+
+    /// Combined health (average of all sessions, or -1 if none).
     var combinedHealth: Int {
-        let occupied = slots.compactMap { $0.session?.health }
-        guard !occupied.isEmpty else { return -1 }
-        return occupied.reduce(0, +) / occupied.count
+        let slotHealth = slots.compactMap { $0.session?.health }
+        let overflowHealth = overflowSnapshots.values.map(\.health)
+        let all = slotHealth + overflowHealth
+        guard !all.isEmpty else { return -1 }
+        return all.reduce(0, +) / all.count
     }
 
-    /// True if this is the auto-generated Workspace team.
-    var isWorkspace: Bool { id == "__workspace__" }
+    /// True if this is an auto-generated team (dynamic grouping).
+    var isDynamic: Bool { id.hasPrefix("__auto_") || id == "__workspace__" }
 }
 
 struct RoleSlot: Identifiable {
@@ -156,6 +173,9 @@ enum TeamsLoader {
     /// Returns TeamState array with sessions slotted into roles,
     /// plus an array of unmatched session IDs.
     ///
+    /// When teams are empty (no teams.json), auto-groups sessions by cwd.
+    /// The Orchestrator's missions.json creates dynamic teams that override everything.
+    ///
     /// Stable matching: sessions sorted by startTime (oldest first) for deterministic
     /// assignment. Previous assignments are preserved when possible to prevent flickering.
     static func matchSessions(
@@ -163,6 +183,110 @@ enum TeamsLoader {
         sessions: [String: MetricsSnapshot],
         sessionCwds: [String: String],
         previousStates: [TeamState] = []
+    ) -> (teamStates: [TeamState], unmatchedSessionIds: [String]) {
+
+        // Dynamic mode: no static teams — auto-group by cwd
+        if teams.isEmpty {
+            return autoGroupByCwd(sessions: sessions, sessionCwds: sessionCwds)
+        }
+
+        // Static mode: match sessions to predefined team roles
+        return matchStaticTeams(
+            teams: teams,
+            sessions: sessions,
+            sessionCwds: sessionCwds,
+            previousStates: previousStates
+        )
+    }
+
+    // MARK: - Dynamic Auto-Grouping
+
+    /// Auto-creates team groupings from active session cwds.
+    /// Each unique cwd becomes a team. Sessions in the same directory are grouped together.
+    /// Team names are derived from the directory name (smart capitalized).
+    private static func autoGroupByCwd(
+        sessions: [String: MetricsSnapshot],
+        sessionCwds: [String: String]
+    ) -> (teamStates: [TeamState], unmatchedSessionIds: [String]) {
+
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+
+        // Group session IDs by their cwd
+        var cwdGroups: [String: [String]] = [:]
+        for (sid, cwd) in sessionCwds where sessions[sid] != nil {
+            cwdGroups[cwd, default: []].append(sid)
+        }
+
+        // Sort groups: non-home first (alphabetically), home last
+        let sortedCwds = cwdGroups.keys.sorted { a, b in
+            if a == home { return false }
+            if b == home { return true }
+            return a < b
+        }
+
+        // Color palette for auto-generated teams
+        let colors = ["#00d4aa", "#FF6B35", "#FFD700", "#4A9EFF", "#A855F7",
+                       "#FF4444", "#10B981", "#F59E0B", "#EC4899", "#607D8B"]
+
+        var teamStates: [TeamState] = []
+
+        for (index, cwd) in sortedCwds.enumerated() {
+            guard let sessionIds = cwdGroups[cwd], !sessionIds.isEmpty else { continue }
+
+            let teamName = deriveTeamName(from: cwd, home: home)
+            let teamId = "__auto_\(cwd.hashValue)__"
+            let color = colors[index % colors.count]
+
+            let config = TeamConfig(
+                id: teamId, name: teamName,
+                cwd: cwd, color: color, roles: []
+            )
+
+            let sortedIds = sessionIds.sorted()
+            var snapshots: [String: MetricsSnapshot] = [:]
+            for sid in sortedIds {
+                if let snap = sessions[sid] { snapshots[sid] = snap }
+            }
+            let state = TeamState(
+                id: teamId, config: config,
+                slots: [], overflowSessionIds: sortedIds,
+                overflowSnapshots: snapshots
+            )
+            teamStates.append(state)
+        }
+
+        // Any sessions without cwd go to unmatched
+        let allGroupedIds = Set(cwdGroups.values.flatMap { $0 })
+        let unmatchedIds = sessions.keys.filter { !allGroupedIds.contains($0) }.sorted()
+
+        return (teamStates, unmatchedIds)
+    }
+
+    /// Derives a human-readable team name from a directory path.
+    private static func deriveTeamName(from cwd: String, home: String) -> String {
+        if cwd == home { return "Workspace" }
+
+        var relative = cwd
+        if relative.hasPrefix(home) {
+            relative = String(relative.dropFirst(home.count))
+            if relative.hasPrefix("/") { relative = String(relative.dropFirst()) }
+        }
+
+        // Take the last meaningful directory component
+        let components = relative.components(separatedBy: "/")
+            .filter { !$0.isEmpty }
+
+        guard let last = components.last else { return "Workspace" }
+        return SessionMetrics.smartCapitalize(last)
+    }
+
+    // MARK: - Static Team Matching
+
+    private static func matchStaticTeams(
+        teams: [TeamConfig],
+        sessions: [String: MetricsSnapshot],
+        sessionCwds: [String: String],
+        previousStates: [TeamState]
     ) -> (teamStates: [TeamState], unmatchedSessionIds: [String]) {
 
         // Build lookup of previous role->session assignments for stability
@@ -200,7 +324,6 @@ enum TeamsLoader {
                 if let prevSid = previousAssignments[key],
                    availableIds.contains(prevSid),
                    let snapshot = sessions[prevSid] {
-                    // Keep previous assignment — no flicker
                     slot.session = snapshot
                     slot.sessionId = prevSid
                     slot.cwd = sessionCwds[prevSid]
@@ -231,29 +354,32 @@ enum TeamsLoader {
             let overflowIds = Array(availableIds.subtracting(matchedSessionIds)).sorted()
             matchedSessionIds.formUnion(overflowIds)
 
-            teamStates.append(TeamState(id: team.id, config: team, slots: slots, overflowSessionIds: overflowIds))
+            var overflowSnaps: [String: MetricsSnapshot] = [:]
+            for sid in overflowIds { if let s = sessions[sid] { overflowSnaps[sid] = s } }
+            teamStates.append(TeamState(id: team.id, config: team, slots: slots, overflowSessionIds: overflowIds, overflowSnapshots: overflowSnaps))
         }
 
         var unmatchedIds = sessions.keys.filter { !matchedSessionIds.contains($0) }.sorted()
 
         // Auto-generate Workspace team for home-dir sessions that don't match any team
-        if !teams.isEmpty {
-            let home = FileManager.default.homeDirectoryForCurrentUser.path
-            let workspaceIds = unmatchedIds.filter { sid in
-                guard let cwd = sessionCwds[sid] else { return false }
-                return cwd == home
-            }
-            if !workspaceIds.isEmpty {
-                let workspaceConfig = TeamConfig(
-                    id: "__workspace__", name: "Workspace",
-                    cwd: home, color: "#607D8B", roles: []
-                )
-                unmatchedIds.removeAll { workspaceIds.contains($0) }
-                teamStates.append(TeamState(
-                    id: "__workspace__", config: workspaceConfig,
-                    slots: [], overflowSessionIds: workspaceIds
-                ))
-            }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let workspaceIds = unmatchedIds.filter { sid in
+            guard let cwd = sessionCwds[sid] else { return false }
+            return cwd == home
+        }
+        if !workspaceIds.isEmpty {
+            let workspaceConfig = TeamConfig(
+                id: "__workspace__", name: "Workspace",
+                cwd: home, color: "#607D8B", roles: []
+            )
+            var wsSnaps: [String: MetricsSnapshot] = [:]
+            for sid in workspaceIds { if let s = sessions[sid] { wsSnaps[sid] = s } }
+            unmatchedIds.removeAll { workspaceIds.contains($0) }
+            teamStates.append(TeamState(
+                id: "__workspace__", config: workspaceConfig,
+                slots: [], overflowSessionIds: workspaceIds,
+                overflowSnapshots: wsSnaps
+            ))
         }
         return (teamStates, unmatchedIds)
     }

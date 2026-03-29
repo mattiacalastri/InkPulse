@@ -18,11 +18,11 @@ struct PopoverView: View {
     private var stats: DashboardStats { DashboardStats(appState: appState) }
 
     private var headerSubtitle: String {
-        if appState.teamConfigs.isEmpty {
-            return "\(stats.snaps.count) agents \u{00B7} \(Int(stats.uptimeMin))m uptime"
+        let teamCount = appState.teamStates.count
+        if teamCount > 0 {
+            return "\(teamCount) groups \u{00B7} \(stats.snaps.count) agents \u{00B7} \(Int(stats.uptimeMin))m uptime"
         }
-        let teamCount = appState.teamConfigs.count
-        return "\(teamCount) teams \u{00B7} \(stats.snaps.count) agents \u{00B7} \(Int(stats.uptimeMin))m uptime"
+        return "\(stats.snaps.count) agents \u{00B7} \(Int(stats.uptimeMin))m uptime"
     }
 
     // MARK: - Body
@@ -146,11 +146,11 @@ struct PopoverView: View {
             Divider().padding(.horizontal, 8)
 
             // ── TEAMS + AGENTS ──
-            if appState.teamConfigs.isEmpty {
-                // No teams configured — show flat agent list (legacy)
+            if appState.teamConfigs.isEmpty && !appState.hasDynamicTeams {
+                // No sessions — show flat agent list
                 flatAgentList
             } else {
-                // Team-based view
+                // Team-based view (static from teams.json OR dynamic from cwd auto-grouping)
                 teamAgentList
             }
 

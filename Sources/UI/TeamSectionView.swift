@@ -104,11 +104,8 @@ struct TeamSectionView: View {
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .foregroundStyle(isPopover ? Color.primary : Color.white)
 
-                    if teamState.activeCount > 0 || teamState.overflowCount > 0 {
-                        let label = teamState.activeCount > 0
-                            ? "\(teamState.activeCount) active" + (teamState.overflowCount > 0 ? " +\(teamState.overflowCount)" : "")
-                            : "+\(teamState.overflowCount)"
-                        Text(label)
+                    if teamState.totalSessions > 0 {
+                        Text("\(teamState.totalSessions) active")
                             .font(.system(size: 8, weight: .semibold, design: .monospaced))
                             .foregroundStyle(team.resolvedColor)
                             .padding(.horizontal, 6)

@@ -229,11 +229,7 @@ enum JSONLParser {
         let isHookProgress = dataStr.contains("hook_progress")
         let isToolUse = !isHookProgress && toolUseID != nil
 
-        let lowered = dataStr.lowercased()
-        let isError = lowered.contains("error")
-            || lowered.contains("denied")
-            || lowered.contains("blocked")
-            || lowered.contains("failed")
+        let isError = detectError(in: dataStr)
 
         // Resolve tool name from registry
         let toolName: String?
@@ -251,5 +247,52 @@ enum JSONLParser {
             timestamp: timestamp,
             sessionId: sessionId
         )
+    }
+
+    // MARK: - Error Detection
+
+    /// Patterns that look like errors but are actually code/variable references.
+    private static let falsePositivePatterns: [String] = [
+        "error_rate", "errorrate", "iserror", "is_error", "onerror", "on_error",
+        "errorcount", "error_count", "errorhandl", "error_handl",
+        "no error", "0 error", "without error", "zero error",
+        "errors found: 0", "errors: 0", "error rate", "errorcode",
+        "haserror", "has_error", "errorfree", "error-free",
+        "seterror", "set_error", "geterror", "get_error",
+        "clearerror", "clear_error", "reseterror", "reset_error",
+        "errorlog", "error_log", "errortype", "error_type",
+        "errormessage", "error_message", "errorinfo", "error_info",
+    ]
+
+    /// Detects real errors in progress data, avoiding false positives from code
+    /// containing "error" as variable names, metrics, or non-error log context.
+    static func detectError(in dataStr: String) -> Bool {
+        guard !dataStr.isEmpty else { return false }
+        let lowered = dataStr.lowercased()
+
+        // Check for false-positive patterns first — if the word "error" appears
+        // only as part of a code identifier or negation, skip it.
+        let hasError = lowered.range(of: #"\berror\b"#, options: .regularExpression) != nil
+        let hasDenied = lowered.range(of: #"\bdenied\b"#, options: .regularExpression) != nil
+        let hasBlocked = lowered.range(of: #"\bblocked\b"#, options: .regularExpression) != nil
+        let hasFailed = lowered.range(of: #"\bfailed\b"#, options: .regularExpression) != nil
+
+        guard hasError || hasDenied || hasBlocked || hasFailed else { return false }
+
+        // If "error" matched, check it's not a false positive
+        if hasError && !hasDenied && !hasBlocked && !hasFailed {
+            // Only "error" matched — check for false positives
+            for pattern in falsePositivePatterns {
+                if lowered.contains(pattern) { return false }
+            }
+            // Also reject if "error" only appears inside a camelCase identifier
+            // e.g. "parseError" or "handleErrorCase"
+            if lowered.range(of: #"[a-z]error[a-z]"#, options: .regularExpression) != nil,
+               lowered.range(of: #"\berror\s*[:=!>\-]"#, options: .regularExpression) == nil {
+                return false
+            }
+        }
+
+        return true
     }
 }

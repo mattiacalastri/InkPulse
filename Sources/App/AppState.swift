@@ -273,7 +273,14 @@ final class AppState: ObservableObject {
         )
         teamStates = result.teamStates
         unmatchedSessionIds = result.unmatchedSessionIds
+
+        // Dynamic mode: always show team view when auto-grouped teams exist
+        // This ensures the org-chart UI appears even without teams.json
+        hasDynamicTeams = teamConfigs.isEmpty && !teamStates.isEmpty
     }
+
+    /// True when teams are auto-generated from session cwds (no static teams.json).
+    @Published var hasDynamicTeams = false
 
     // MARK: - Spawn
 
