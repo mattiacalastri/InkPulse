@@ -4,6 +4,7 @@ struct LiveTab: View {
     @ObservedObject var appState: AppState
 
     @State private var expandedSessionId: String?
+    @State private var showStopConfirm = false
 
     // MARK: - Stats
 
@@ -90,6 +91,8 @@ struct LiveTab: View {
 
             Spacer()
 
+            orchestrateButton
+
             // EGI glyph (global)
             if appState.metricsEngine.globalEGIState > .dormant {
                 VStack(alignment: .center, spacing: 2) {
@@ -122,6 +125,100 @@ struct LiveTab: View {
                 Text("IDLE")
                     .font(.system(size: 20, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.3))
+            }
+        }
+    }
+
+    // MARK: - Orchestrate Button
+
+    private var orchestrateButton: some View {
+        Group {
+            switch appState.orchestratePhase {
+            case .idle:
+                Button(action: { appState.orchestrate() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "brain.head.profile")
+                            .font(.system(size: 12))
+                        Text("Orchestrate")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                    }
+                    .foregroundStyle(Color(hex: "#00d4aa"))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(Color(hex: "#00d4aa").opacity(0.12))
+                            .overlay(Capsule().stroke(Color(hex: "#00d4aa").opacity(0.3), lineWidth: 1))
+                    )
+                }
+                .buttonStyle(.borderless)
+
+            case .thinking:
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .tint(Color(hex: "#00d4aa"))
+                    Text("Thinking...")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(hex: "#00d4aa"))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(Color(hex: "#00d4aa").opacity(0.08)))
+
+            case .spawning(let done, let total):
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .tint(Color(hex: "#FFD700"))
+                    Text("Spawning \(done)/\(total)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(hex: "#FFD700"))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(Color(hex: "#FFD700").opacity(0.08)))
+
+            case .active:
+                Button(action: { showStopConfirm = true }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 12))
+                        Text("7 Active")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                    }
+                    .foregroundStyle(Color(hex: "#00d4aa"))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(Color(hex: "#00d4aa").opacity(0.15))
+                            .overlay(Capsule().stroke(Color(hex: "#00d4aa").opacity(0.4), lineWidth: 1))
+                    )
+                }
+                .buttonStyle(.borderless)
+                .alert("Stop Orchestration?", isPresented: $showStopConfirm) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Stop", role: .destructive) { appState.stopOrchestrate() }
+                } message: {
+                    Text("This resets the orchestration state. Running agents will continue but won't be tracked as an orchestrated team.")
+                }
+
+            case .failed(let reason):
+                Button(action: { appState.orchestrate() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12))
+                        Text("Retry")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                    }
+                    .foregroundStyle(Color(hex: "#FF4444"))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Color(hex: "#FF4444").opacity(0.1)))
+                }
+                .buttonStyle(.borderless)
+                .help(reason)
             }
         }
     }
@@ -469,7 +566,7 @@ struct LiveTab: View {
 
     private var footer: some View {
         HStack {
-            Text("v2.1.0 · InkPulse")
+            Text("v2.2.0 · InkPulse")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.25))
             Spacer()

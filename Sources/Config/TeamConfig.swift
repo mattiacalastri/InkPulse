@@ -81,6 +81,58 @@ struct TeamsFile: Codable {
     let teams: [TeamConfig]
 }
 
+// MARK: - Orchestrate (Dynamic Missions)
+
+struct MissionConfig: Codable, Identifiable {
+    let id: String
+    let name: String
+    let cwd: String
+    let icon: String
+    let color: String?
+    let prompt: String
+
+    /// Expands ~ to home directory.
+    var resolvedCwd: String {
+        if cwd == "~" {
+            return FileManager.default.homeDirectoryForCurrentUser.path
+        }
+        if cwd.hasPrefix("~/") {
+            return FileManager.default.homeDirectoryForCurrentUser.path
+                + String(cwd.dropFirst(1))
+        }
+        return cwd
+    }
+
+    /// Convert to RoleConfig for reuse with TeamSpawner.
+    var asRole: RoleConfig {
+        RoleConfig(id: id, name: name, prompt: prompt, icon: icon)
+    }
+
+    /// Convert to TeamConfig (single-role team) for reuse with TeamSpawner.
+    func asTeam(teamColor: String = "#00d4aa") -> TeamConfig {
+        TeamConfig(id: "orch-\(id)", name: name, cwd: cwd, color: color ?? teamColor, roles: [asRole])
+    }
+}
+
+struct MissionsFile: Codable {
+    let generated: String
+    let reasoning: String
+    let missions: [MissionConfig]
+}
+
+enum OrchestratePhase: Equatable {
+    case idle
+    case thinking
+    case spawning(Int, Int)  // (completed, total)
+    case active
+    case failed(String)
+
+    var isFailed: Bool {
+        if case .failed = self { return true }
+        return false
+    }
+}
+
 // MARK: - TeamsLoader
 
 enum TeamsLoader {
