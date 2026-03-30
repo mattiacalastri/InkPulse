@@ -96,8 +96,9 @@ final class MCPServerManager: ObservableObject {
 
         // Handle termination
         process.terminationHandler = { [weak self] proc in
+            guard let strongSelf = self else { return }
             Task { @MainActor in
-                self?.handleTermination(name: name, exitCode: proc.terminationStatus)
+                strongSelf.handleTermination(name: name, exitCode: proc.terminationStatus)
             }
         }
 
