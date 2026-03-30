@@ -37,6 +37,11 @@ final class AppState: ObservableObject {
     @Published var sessionRegistry = SessionRegistry()
     private var eventDetector: EventDetector?
 
+    // MARK: - MCP Hub (Phase 4)
+    @Published var mcpServerManager = MCPServerManager()
+    @Published var mcpProxy = MCPProxy()
+    @Published var mcpHubEnabled = false
+
     private let maxTokenHistory = 300  // ~5 min at 1 sample/s
 
     /// Previous aggregate health for delta arrow.
@@ -111,6 +116,10 @@ final class AppState: ObservableObject {
 
         // Event detector
         eventDetector = EventDetector(notificationManager: notificationManager)
+
+        // MCP Hub — load config, optionally launch
+        mcpServerManager.loadConfig()
+        AppState.log("MCPHub: \(mcpServerManager.totalCount) servers loaded")
 
         // Quota fetcher — file-only token, no popups
         quotaFetcher = QuotaFetcher()
@@ -281,6 +290,23 @@ final class AppState: ObservableObject {
 
     /// True when teams are auto-generated from session cwds (no static teams.json).
     @Published var hasDynamicTeams = false
+
+    // MARK: - MCP Hub Control
+
+    func startMCPHub() {
+        guard !mcpHubEnabled else { return }
+        mcpServerManager.launchAll()
+        mcpProxy.start(serverManager: mcpServerManager)
+        mcpHubEnabled = true
+        AppState.log("MCPHub: started (\(mcpServerManager.runningCount)/\(mcpServerManager.totalCount) servers)")
+    }
+
+    func stopMCPHub() {
+        mcpProxy.stop()
+        mcpServerManager.stopAll()
+        mcpHubEnabled = false
+        AppState.log("MCPHub: stopped")
+    }
 
     // MARK: - Spawn
 

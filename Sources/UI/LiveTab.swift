@@ -184,7 +184,7 @@ struct LiveTab: View {
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 12))
-                        Text("7 Active")
+                        Text("\(appState.orchestrateMissions?.missions.count ?? 0) Active")
                             .font(.system(size: 12, weight: .bold, design: .rounded))
                     }
                     .foregroundStyle(Color(hex: "#00d4aa"))
