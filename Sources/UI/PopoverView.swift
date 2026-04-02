@@ -153,54 +153,45 @@ struct PopoverView: View {
 
             Divider().padding(.horizontal, 8)
 
-            // ── STATS FOOTER ──
+            // ── FOOTER: stats + actions ──
             HStack(spacing: 0) {
                 statMini("agents", "\(stats.totalAgents)")
                 statMini("sessions", "\(stats.snaps.count)")
                 statMini("tok/agent", String(format: "%.0f", stats.throughputPerAgent))
                 Spacer()
             }
-            .padding(.horizontal, 12).padding(.vertical, 4)
+            .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 4)
 
-            Divider().padding(.horizontal, 8)
-
-            // ── ACTIONS ──
-            HStack(spacing: 12) {
-                Button(action: { appState.generateReport() }) {
-                    Label("Report", systemImage: "doc.text.fill")
-                        .font(.system(.caption, design: .rounded))
-                        .frame(maxWidth: .infinity)
+            HStack(spacing: 8) {
+                footerButton("Report", icon: "doc.text.fill", color: Color(hex: "#00d4aa")) {
+                    appState.generateReport()
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-
-                Button(action: { appState.togglePause() }) {
-                    Label(appState.isPaused ? "Resume" : "Pause", systemImage: appState.isPaused ? "play.fill" : "pause.fill")
-                        .font(.system(.caption, design: .rounded))
-                        .frame(maxWidth: .infinity)
+                footerButton(appState.isPaused ? "Resume" : "Pause",
+                             icon: appState.isPaused ? "play.fill" : "pause.fill",
+                             color: Color(hex: "#00d4aa")) {
+                    appState.togglePause()
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-
-                Button(action: { appState.openConfig() }) {
-                    Label("Config", systemImage: "gearshape.fill")
-                        .font(.system(.caption, design: .rounded))
-                        .frame(maxWidth: .infinity)
+                footerButton("Config", icon: "gearshape.fill", color: Color(hex: "#00d4aa")) {
+                    appState.openConfig()
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
+
+                Spacer()
+
+                Button(action: { NSApplication.shared.terminate(nil) }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 8))
+                        Text("Quit")
+                            .font(.system(size: 8, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(.red.opacity(0.5))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(.red.opacity(0.04)))
+                }
+                .buttonStyle(.borderless)
             }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-
-            // ── QUIT ──
-            Button(action: { NSApplication.shared.terminate(nil) }) {
-                Label("Quit InkPulse", systemImage: "xmark.circle.fill")
-                    .font(.system(.caption, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderless)
-            .padding(.bottom, 6)
+            .padding(.horizontal, 12).padding(.bottom, 8)
         }
         .frame(width: 560)
     }
@@ -235,6 +226,22 @@ struct PopoverView: View {
         Rectangle()
             .fill(Color.primary.opacity(0.08))
             .frame(width: 1, height: 28)
+    }
+
+    private func footerButton(_ title: String, icon: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 8))
+                Text(title)
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+            }
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(color.opacity(0.08)))
+        }
+        .buttonStyle(.borderless)
     }
 
     private func statMini(_ label: String, _ value: String) -> some View {
