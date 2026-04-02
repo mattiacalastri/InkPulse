@@ -184,6 +184,12 @@ struct RoleCardView: View {
         return idle < 30 && snap.tokenMin > 50
     }
 
+    private var modelIsKnown: Bool {
+        guard let snap = slot.session else { return false }
+        let m = snap.model.lowercased()
+        return !m.isEmpty && m != "unknown"
+    }
+
     private var statusVerb: String {
         guard let snap = slot.session else { return "Vacant" }
         let idle = Date().timeIntervalSince(snap.lastEventTime)
@@ -198,17 +204,19 @@ struct RoleCardView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Role identity
+        VStack(alignment: .leading, spacing: isActive ? 6 : 4) {
             roleHeader
 
             if isOccupied {
-                occupiedContent
+                if isActive {
+                    activeContent
+                }
+                actionButtons
             } else {
                 vacantContent
             }
         }
-        .padding(10)
+        .padding(isActive ? 10 : 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(cardBackground)
         .contentShape(Rectangle())
@@ -239,10 +247,24 @@ struct RoleCardView: View {
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundStyle(isOccupied ? (isPopover ? Color.primary : Color.white) : Color.secondary)
 
+            // Inline status when idle
+            if isOccupied && !isActive {
+                Text(statusVerb)
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .foregroundStyle(.gray)
+            }
+
             Spacer()
 
-            // Model badge (occupied only)
+            // Health score (occupied)
             if let snap = slot.session {
+                Text("\(snap.health)")
+                    .font(.system(size: isActive ? 14 : 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(healthColor(for: snap.health))
+            }
+
+            // Model badge (only if known)
+            if modelIsKnown, let snap = slot.session {
                 Text(modelShortName(snap.model))
                     .font(.system(size: 7, weight: .semibold, design: .monospaced))
                     .foregroundStyle(modelColor(snap.model))
@@ -260,21 +282,19 @@ struct RoleCardView: View {
         }
     }
 
-    // MARK: - Occupied Content
+    // MARK: - Active Content (tool + vitals — only when working)
 
-    private var occupiedContent: some View {
+    private var activeContent: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Status verb
             Text(statusVerb)
                 .font(.system(size: 10, weight: .medium, design: .rounded))
-                .foregroundStyle(isActive ? Color(hex: "#00d4aa") : .gray)
+                .foregroundStyle(Color(hex: "#00d4aa"))
 
-            // Current tool
             if let toolName = slot.session?.lastToolName {
                 HStack(spacing: 3) {
-                    Image(systemName: isActive ? "bolt.fill" : "clock")
+                    Image(systemName: "bolt.fill")
                         .font(.system(size: 6))
-                        .foregroundStyle(isActive ? Color(hex: "#00d4aa") : .gray.opacity(0.5))
+                        .foregroundStyle(Color(hex: "#00d4aa"))
                     let target = slot.session?.lastToolTarget
                     Text("\(toolName)\(target.map { " \u{2192} \($0)" } ?? "")")
                         .font(.system(size: 8, design: .monospaced))
@@ -283,66 +303,63 @@ struct RoleCardView: View {
                 }
             }
 
-            // Vitals row
-            HStack(spacing: 8) {
-                if let snap = slot.session {
+            if let snap = slot.session {
+                HStack(spacing: 8) {
                     Text(String(format: "%.0f", snap.tokenMin))
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundStyle(.primary)
                     Text(String(format: "€%.2f", snap.costEUR))
                         .font(.system(size: 9, design: .monospaced))
                         .foregroundStyle(.secondary)
+                    Spacer()
                 }
-                Spacer()
-                if let snap = slot.session {
-                    Text("\(snap.health)")
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundStyle(healthColor(for: snap.health))
+            }
+        }
+    }
+
+    // MARK: - Action Buttons (compact)
+
+    private var actionButtons: some View {
+        HStack(spacing: 6) {
+            if let dir = cwd {
+                Button(action: { TerminalOpener.open(cwd: dir) }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "terminal.fill")
+                            .font(.system(size: 8))
+                        Text("Open")
+                            .font(.system(size: 8, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(teamColor)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(teamColor.opacity(0.1)))
+                }
+                .buttonStyle(.borderless)
+            }
+
+            if onKill != nil {
+                Button(action: { showKillConfirm = true }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 8))
+                        Text("Quit")
+                            .font(.system(size: 8, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(.red.opacity(0.7))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(.red.opacity(0.06)))
+                }
+                .buttonStyle(.borderless)
+                .alert("Stop Agent?", isPresented: $showKillConfirm) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Stop", role: .destructive) { onKill?() }
+                } message: {
+                    Text("This will send SIGTERM to \(slot.role.name).")
                 }
             }
 
-            // Action buttons
-            HStack(spacing: 6) {
-                if let dir = cwd {
-                    Button(action: { TerminalOpener.open(cwd: dir) }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "terminal.fill")
-                                .font(.system(size: 8))
-                            Text("Open")
-                                .font(.system(size: 8, weight: .semibold, design: .rounded))
-                        }
-                        .foregroundStyle(teamColor)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(teamColor.opacity(0.1)))
-                    }
-                    .buttonStyle(.borderless)
-                }
-
-                if onKill != nil {
-                    Button(action: { showKillConfirm = true }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "stop.fill")
-                                .font(.system(size: 8))
-                            Text("Quit")
-                                .font(.system(size: 8, weight: .semibold, design: .rounded))
-                        }
-                        .foregroundStyle(.red.opacity(0.8))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(.red.opacity(0.08)))
-                    }
-                    .buttonStyle(.borderless)
-                    .alert("Stop Agent?", isPresented: $showKillConfirm) {
-                        Button("Cancel", role: .cancel) {}
-                        Button("Stop", role: .destructive) { onKill?() }
-                    } message: {
-                        Text("This will send SIGTERM to \(slot.role.name). The agent will attempt to save its work before exiting.")
-                    }
-                }
-
-                Spacer()
-            }
+            Spacer()
         }
     }
 

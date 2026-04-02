@@ -81,14 +81,30 @@ struct AgentCardView: View {
         return "Idle"
     }
 
+    private var modelIsKnown: Bool {
+        let m = snapshot.model.lowercased()
+        return !m.isEmpty && m != "unknown"
+    }
+
+    private var displayName: String {
+        pillar.name
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .split(separator: " ")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: isAgentActive ? 6 : 4) {
             cardIdentity
-            cardActivity
-            cardVitals
+            if isAgentActive {
+                cardActivity
+                cardVitals
+            }
             cardActionBar
         }
-        .padding(12)
+        .padding(isAgentActive ? 12 : 10)
         .background(cardBackground)
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
@@ -105,41 +121,49 @@ struct AgentCardView: View {
                 BreathingDot(color: mood.color, isActive: isAgentActive)
             }
 
-            // Name + context
-            VStack(alignment: .leading, spacing: 2) {
-                Text(pillar.name)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(pillar.color)
-                    .lineLimit(1)
+            // Name
+            Text(displayName)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(pillar.color)
+                .lineLimit(1)
 
-                if let branch = gitBranch {
-                    Text(branch)
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                } else if pillar.name == "Home" {
-                    Text(String(snapshot.sessionId.prefix(8)))
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundStyle(.quaternary)
-                        .lineLimit(1)
-                }
+            // Inline status when idle
+            if !isAgentActive {
+                Text(statusVerb)
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(.gray)
+            }
+
+            // Git branch (active only)
+            if isAgentActive, let branch = gitBranch {
+                Text(branch)
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
 
             Spacer()
 
-            // Model + uptime
-            VStack(alignment: .trailing, spacing: 2) {
+            // Health score — always visible
+            Text("\(snapshot.health)")
+                .font(.system(size: isAgentActive ? 16 : 14, weight: .bold, design: .rounded))
+                .foregroundStyle(healthColor(for: snapshot.health))
+
+            // Context % (only if critical)
+            if snapshot.contextPercent > 0.6 {
+                Text(String(format: "%.0f%%", snapshot.contextPercent * 100))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(contextColor(for: snapshot.contextPercent))
+            }
+
+            // Model badge (only if known)
+            if modelIsKnown {
                 Text(modelShortName(snapshot.model))
-                    .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 7, weight: .semibold, design: .monospaced))
                     .foregroundStyle(modelColor(snapshot.model))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(
-                        Capsule().fill(modelColor(snapshot.model).opacity(0.12))
-                    )
-                Text(formatUptime(snapshot.startTime))
-                    .font(.system(size: 8, design: .monospaced))
-                    .foregroundStyle(.quaternary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(modelColor(snapshot.model).opacity(0.12)))
             }
         }
     }
@@ -151,19 +175,19 @@ struct AgentCardView: View {
             // Status verb — the story
             Text(statusVerb)
                 .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundColor(isAgentActive ? Color(hex: "#00d4aa") : Color.gray)
+                .foregroundColor(Color(hex: "#00d4aa"))
 
             // Current tool — what specifically
             if let toolName = snapshot.lastToolName {
                 HStack(spacing: 4) {
-                    Image(systemName: isAgentActive ? "bolt.fill" : "clock")
+                    Image(systemName: "bolt.fill")
                         .font(.system(size: 7))
-                        .foregroundColor(isAgentActive ? Color(hex: "#00d4aa") : Color.gray.opacity(0.5))
+                        .foregroundColor(Color(hex: "#00d4aa"))
 
                     let display = toolDisplay(toolName, target: snapshot.lastToolTarget)
                     Text(display)
                         .font(.system(size: 9, design: .monospaced))
-                        .foregroundColor(isAgentActive ? Color.white.opacity(0.7) : Color.gray.opacity(0.5))
+                        .foregroundColor(Color.white.opacity(0.7))
                         .lineLimit(1)
                 }
             }
@@ -173,70 +197,64 @@ struct AgentCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(isAgentActive ? Color(hex: "#00d4aa").opacity(0.06) : Color.clear)
+                .fill(Color(hex: "#00d4aa").opacity(0.06))
         )
     }
 
-    // MARK: - Vitals (health at a glance, not a spreadsheet)
+    // MARK: - Vitals (health at a glance — only when active)
 
     private var cardVitals: some View {
         HStack(spacing: 10) {
-            // Speed
             vital(String(format: "%.0f", snapshot.tokenMin), icon: "speedometer", color: .primary)
-
-            // Cost
             vital(String(format: "€%.2f", snapshot.costEUR), icon: "eurosign.circle", color: .primary)
 
             Spacer()
 
-            // Health score (the most important number)
-            Text("\(snapshot.health)")
-                .font(.system(size: 16, weight: .bold, design: .rounded))
-                .foregroundStyle(healthColor(for: snapshot.health))
-
-            // Context % (only if critical)
-            if snapshot.contextPercent > 0.6 {
-                Text(String(format: "%.0f%%", snapshot.contextPercent * 100))
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundStyle(contextColor(for: snapshot.contextPercent))
+            // Badges (subagents, errors)
+            if snapshot.subagentCount > 0 {
+                badge("\(snapshot.subagentCount)", icon: "person.2.fill", color: Color(hex: "#4A9EFF"))
             }
+            if snapshot.errorRate > 0.01 {
+                badge(String(format: "%.0f%%", snapshot.errorRate * 100), icon: "exclamationmark.triangle.fill", color: Color(hex: "#FF4444"))
+            }
+
+            Text(formatUptime(snapshot.startTime))
+                .font(.system(size: 8, design: .monospaced))
+                .foregroundStyle(.quaternary)
         }
     }
 
-    // MARK: - Action Bar (what can I DO with this agent?)
+    // MARK: - Action Bar (compact inline)
 
     private var cardActionBar: some View {
-        HStack(spacing: 0) {
-            // Open — the primary action
+        HStack(spacing: 6) {
             Button(action: { openTerminal() }) {
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     Image(systemName: "terminal.fill")
-                        .font(.system(size: 9))
+                        .font(.system(size: 8))
                     Text("Open")
-                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .font(.system(size: 8, weight: .semibold, design: .rounded))
                 }
                 .foregroundStyle(pillar.color)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule().fill(pillar.color.opacity(0.1))
-                )
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(pillar.color.opacity(0.1)))
             }
             .buttonStyle(.borderless)
             .disabled(cwd == nil)
 
             if onKill != nil {
                 Button(action: { showKillConfirm = true }) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
                         Image(systemName: "stop.fill")
-                            .font(.system(size: 9))
+                            .font(.system(size: 8))
                         Text("Quit")
-                            .font(.system(size: 9, weight: .semibold, design: .rounded))
+                            .font(.system(size: 8, weight: .semibold, design: .rounded))
                     }
-                    .foregroundStyle(.red.opacity(0.8))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(.red.opacity(0.08)))
+                    .foregroundStyle(.red.opacity(0.7))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(.red.opacity(0.06)))
                 }
                 .buttonStyle(.borderless)
                 .alert("Stop Agent?", isPresented: $showKillConfirm) {
@@ -249,14 +267,11 @@ struct AgentCardView: View {
 
             Spacer()
 
-            // Badges (subagents, errors)
-            HStack(spacing: 6) {
-                if snapshot.subagentCount > 0 {
-                    badge("\(snapshot.subagentCount)", icon: "person.2.fill", color: Color(hex: "#4A9EFF"))
-                }
-                if snapshot.errorRate > 0.01 {
-                    badge(String(format: "%.0f%%", snapshot.errorRate * 100), icon: "exclamationmark.triangle.fill", color: Color(hex: "#FF4444"))
-                }
+            // Uptime (idle only — active shows it in vitals)
+            if !isAgentActive {
+                Text(formatUptime(snapshot.startTime))
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundStyle(.quaternary)
             }
         }
     }
