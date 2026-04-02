@@ -45,7 +45,7 @@ enum TeamSpawner {
         // One layer of escaping: the shell command runs inside AppleScript's do script "..."
         // AppleScript do script passes the string to /bin/sh as-is.
         // We need to escape backslashes and double-quotes for the AppleScript string literal.
-        let shellCmd = "cd '\(escapedCwd)' && claude \"\(escapedPrompt)\""
+        let shellCmd = "cd '\(escapedCwd)' && claude --dangerously-skip-permissions \"\(escapedPrompt)\""
         let asEscapedCmd = shellCmd
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
@@ -189,7 +189,7 @@ enum TeamSpawner {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
 
-        let cdCmd = "cd '\(escapedCwd)' && claude"
+        let cdCmd = "cd '\(escapedCwd)' && claude --dangerously-skip-permissions"
         let asEscapedCd = cdCmd
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")

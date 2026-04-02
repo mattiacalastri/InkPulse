@@ -102,7 +102,7 @@ enum OrchestrateSpawner {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
 
-        let shellCmd = "cd '\(home)' && claude \"\(escapedPrompt)\""
+        let shellCmd = "cd '\(home)' && claude --dangerously-skip-permissions \"\(escapedPrompt)\""
         let asEscapedCmd = shellCmd
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
