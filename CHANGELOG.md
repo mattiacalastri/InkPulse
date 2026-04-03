@@ -4,6 +4,79 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v2.3.0] - 2026-04-03
+
+### Added
+- MCP Hub (Phase 4) — shared MCP server pool with TCP proxy, eliminates N*M process duplication
+- 23 stress tests for MCPRouter + MCPServerManager
+- Adaptive agent cards — compact when idle, full detail when active
+- Compact footer with capsule buttons
+
+### Changed
+- Version aligned across ConfigView and LiveTab (was inconsistent v2.1.0/v2.2.0)
+
+### Fixed
+- Flexible decoder test aligned with graceful degradation behavior (malformed JSON → empty missions)
+- Swift strict concurrency warnings in MCP Hub closures
+- PromptBox removed from popover — data over poetry
+
+## [v2.2.0] - 2026-03-28
+
+### Added
+- Dynamic orchestrator spawning — Claude meta-prompt generates missions, InkPulse spawns them
+- OrchestrateSpawner with identity-infused meta-prompt (Percezione Liminale, 7 Idee Pure)
+- MissionsWatcher with FSEvents + poll fallback
+- MissionConfig, MissionsFile, OrchestratePhase types
+- Orchestrate button in LiveTab header with phase state machine
+
+### Fixed
+- Concurrency error in orchestrate timeout handler
+- 3 known issues resolved + dynamic team auto-grouping
+
+## [v2.1.0] - 2026-03-27
+
+### Added
+- Setup Wizard — organize teams in 30 seconds, zero manual JSON
+- Deck editor — customize motivational quotes from Config UI
+- Unified menu bar — polpo icon with health, tok/min, cost metrics
+- Externalized prompt deck to JSON loader with generic EN deck for OSS
+
+### Changed
+- Removed all hardcoded project names — fully dynamic pillar system
+- Workspace team + overflow agent grouping + live menu bar
+
+### Fixed
+- .gitignore hardened with credential patterns
+
+## [v2.0.0] - 2026-03-26
+
+### Added
+- Team UI (Phase 1) — org chart replaces flat agent list
+- One-Click Spawn (Phase 2) — spawn terminal windows per team/role with AppleScript
+- WebSocket control channel (Phase 3) — bidirectional IPC on localhost:9999
+- EventDetector for significant event notifications (Phase 5)
+- SessionKiller with confirmation alert on role cards
+- PromptBoxView identity prompt picker
+- v3 SPEC — control plane vision for multi-agent Claude Code teams
+- Apache 2.0 license + README rewrite for GitHub growth
+
+### Changed
+- Architecture evolved from passive monitor to active control plane
+- CodexBar absorbed — accurate pricing, live quota sync, incremental scan
+
+### Fixed
+- Process resolution via pgrep -f for reliable claude PID matching
+- AppleScript quoting — single escape layer for do script
+- Terminal window matching simplified to title-based approach
+- Ghost session detection and cleanup
+
+## [v1.4.0] - 2026-03-25
+
+### Added
+- Project name inference from tool paths when cwd is Home (ring buffer + frequency analysis)
+- 15 new pillar tests, total 60
+- Smart capitalize for inferred project names
+
 ## [v1.3.0] - 2026-03-25
 
 ### Added
@@ -70,6 +143,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - CWD-based project names
 - README and MIT license
 
+[v2.3.0]: https://github.com/mattiacalastri/InkPulse/compare/v2.2.0...v2.3.0
+[v2.2.0]: https://github.com/mattiacalastri/InkPulse/compare/v2.1.0...v2.2.0
+[v2.1.0]: https://github.com/mattiacalastri/InkPulse/compare/v2.0.0...v2.1.0
+[v2.0.0]: https://github.com/mattiacalastri/InkPulse/compare/v1.4.0...v2.0.0
+[v1.4.0]: https://github.com/mattiacalastri/InkPulse/compare/v1.3.0...v1.4.0
+[v1.3.0]: https://github.com/mattiacalastri/InkPulse/compare/v1.2.0...v1.3.0
 [v1.2.0]: https://github.com/mattiacalastri/InkPulse/compare/v1.1.0...v1.2.0
 [v1.1.0]: https://github.com/mattiacalastri/InkPulse/compare/v1.0.0...v1.1.0
 [v1.0.0]: https://github.com/mattiacalastri/InkPulse/releases/tag/v1.0.0

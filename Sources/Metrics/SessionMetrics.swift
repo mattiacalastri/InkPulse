@@ -104,9 +104,9 @@ final class SessionMetrics {
                 + msg.usage.cacheCreationInputTokens
 
             // Last tool name + target from tool_use content blocks (Feature 2)
-            for tool in msg.toolUses {
-                toolCountsByName[tool.name, default: 0] += 1
-            }
+            // Note: toolCountsByName is incremented in progress events only,
+            // to avoid double-counting (assistant events declare tool_use,
+            // progress events confirm execution).
             if let lastTool = msg.toolUses.last {
                 lastToolName = lastTool.name
                 lastToolTarget = lastTool.target
@@ -134,16 +134,16 @@ final class SessionMetrics {
             }
 
             // Thinking / output estimation
+            // Use consistent estimation method (text.count / 4) for both.
+            // Do NOT add usage.outputTokens — it includes thinking tokens in
+            // Claude's API, which would deflate thinkOutputRatio artificially.
             if let thinkText = msg.thinkingText, !thinkText.isEmpty {
-                // Rough estimate: 4 chars per token
                 estimatedThinkingTokens += max(thinkText.count / 4, 1)
                 hasThinkingData = true
             }
             if let outText = msg.outputText, !outText.isEmpty {
                 estimatedOutputTokens += max(outText.count / 4, 1)
             }
-            // Also add usage-reported output tokens to estimate
-            estimatedOutputTokens += msg.usage.outputTokens
 
             // Cache totals
             totalInput += msg.usage.inputTokens

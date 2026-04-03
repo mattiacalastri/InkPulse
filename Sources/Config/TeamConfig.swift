@@ -100,7 +100,7 @@ struct TeamsFile: Codable {
 
 // MARK: - Orchestrate (Dynamic Missions)
 
-struct MissionConfig: Codable, Identifiable {
+struct MissionConfig: Identifiable, Codable {
     let id: String
     let name: String
     let cwd: String
@@ -135,6 +135,118 @@ struct MissionsFile: Codable {
     let generated: String
     let reasoning: String
     let missions: [MissionConfig]
+
+    // MARK: - Flexible Decoder
+    // The orchestrator LLM may produce varied JSON structures.
+    // This decoder accepts both the canonical format (array of missions)
+    // and the natural LLM format (dict of missions with richer fields).
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: FlexibleKeys.self)
+
+        generated = (try? container.decode(String.self, forKey: .generated)) ?? ""
+
+        // reasoning: accept "reasoning", "zeroth_law", "title", or combine what's available
+        if let r = try? container.decode(String.self, forKey: .reasoning) {
+            reasoning = r
+        } else {
+            let zeroth = (try? container.decode(String.self, forKey: .zeroth_law)) ?? ""
+            let title = (try? container.decode(String.self, forKey: .title)) ?? ""
+            reasoning = [title, zeroth].filter { !$0.isEmpty }.joined(separator: " — ")
+        }
+
+        // missions: accept array or dictionary
+        if let array = try? container.decode([MissionConfig].self, forKey: .missions) {
+            missions = array
+        } else if let dict = try? container.decode([String: FlexibleMission].self, forKey: .missions) {
+            missions = dict.sorted(by: { $0.key < $1.key }).map { key, fm in
+                fm.toMissionConfig(id: key)
+            }
+        } else {
+            missions = []
+        }
+    }
+
+    init(generated: String, reasoning: String, missions: [MissionConfig]) {
+        self.generated = generated
+        self.reasoning = reasoning
+        self.missions = missions
+    }
+
+    private enum FlexibleKeys: String, CodingKey {
+        case generated, reasoning, missions
+        case zeroth_law, title
+    }
+}
+
+/// Decodes the richer mission format that the orchestrator LLM naturally produces.
+/// Maps fields like "perche", "cosa", "agent_type" into the canonical MissionConfig.
+private struct FlexibleMission: Codable {
+    // Canonical fields (may be present)
+    let name: String?
+    let cwd: String?
+    let icon: String?
+    let color: String?
+    let prompt: String?
+
+    // LLM-natural fields
+    let perche: String?
+    let cosa: String?
+    let agent_type: String?
+    let successo: String?
+    let idea_pura: String?
+
+    func toMissionConfig(id: String) -> MissionConfig {
+        // Synthesize prompt from perche + cosa if prompt not provided
+        let finalPrompt: String
+        if let p = prompt, !p.isEmpty {
+            finalPrompt = p
+        } else {
+            var parts: [String] = []
+            if let ip = idea_pura { parts.append("Idea Pura: \(ip)") }
+            if let p = perche { parts.append("Perche: \(p)") }
+            if let c = cosa { parts.append("Cosa fare: \(c)") }
+            if let s = successo { parts.append("Successo: \(s)") }
+            finalPrompt = parts.joined(separator: "\n\n")
+        }
+
+        // Infer cwd from agent_type if not provided
+        let finalCwd = cwd ?? Self.cwdForAgentType(agent_type)
+
+        // Map agent_type to icon if icon not provided
+        let finalIcon = icon ?? Self.iconForAgentType(agent_type)
+
+        return MissionConfig(
+            id: id,
+            name: name ?? id,
+            cwd: finalCwd,
+            icon: finalIcon,
+            color: color,
+            prompt: finalPrompt
+        )
+    }
+
+    private static func cwdForAgentType(_ agentType: String?) -> String {
+        switch agentType {
+        case "aurahome-specialist", "wp-deployer":  return "~/projects/aurahome"
+        case "bot-specialist":                       return "~/btc_predictions"
+        case "client-ops":                           return "~"
+        case "os-architect":                         return "~/claude_voice"
+        default:                                     return "~"
+        }
+    }
+
+    private static func iconForAgentType(_ agentType: String?) -> String {
+        switch agentType {
+        case "aurahome-specialist":  return "cart.fill"
+        case "wp-deployer":          return "server.rack"
+        case "bot-specialist":       return "chart.line.uptrend.xyaxis"
+        case "client-ops":           return "envelope.fill"
+        case "os-architect":         return "brain"
+        case "security-sentinel":    return "shield.fill"
+        default:                     return "hammer.fill"
+        }
+    }
 }
 
 enum OrchestratePhase: Equatable {

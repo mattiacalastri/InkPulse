@@ -41,12 +41,15 @@ final class OrchestrateTests: XCTestCase {
         XCTAssertEqual(file.missions[0].color, "#FF6B35")
     }
 
-    func testDecodeMissionsFileMalformed() {
+    func testDecodeMissionsFileMalformed() throws {
         let json = """
         {"not": "a missions file"}
         """.data(using: .utf8)!
 
-        XCTAssertThrowsError(try JSONDecoder().decode(MissionsFile.self, from: json))
+        // Flexible decoder degrades gracefully — malformed input yields empty missions, not a throw
+        let file = try JSONDecoder().decode(MissionsFile.self, from: json)
+        XCTAssertTrue(file.missions.isEmpty)
+        XCTAssertTrue(file.reasoning.isEmpty)
     }
 
     // MARK: - MissionsWatcher
