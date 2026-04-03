@@ -219,7 +219,7 @@ After:  Session1 -> InkPulse MCP Proxy -> [fal, tg, github, ...]  (shared)
     "inkpulse-proxy": {
       "type": "stdio",
       "command": "~/.inkpulse/mcp-proxy-client",
-      "args": ["--port", "9998"]
+      "args": ["--port", "9997"]
     }
   }
 }

@@ -183,7 +183,8 @@ InkPulse.app — pure Swift, zero external dependencies
 - [x] Daily cost budget with alerts
 - [x] Project inference from file paths
 - [x] Session kill with confirmation
-- [ ] MCP Hub — shared MCP server pool across agents
+- [x] MCP Hub — shared MCP server pool across agents
+- [x] Dynamic Orchestrator — AI-generated missions with one-click spawning
 - [ ] Send Task UI — dispatch prompts to agents from dashboard
 - [ ] macOS widget for daily cost
 - [ ] Cross-session data export

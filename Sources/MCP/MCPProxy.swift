@@ -16,7 +16,7 @@ final class MCPProxy: ObservableObject {
     private weak var serverManager: MCPServerManager?
     private let port: UInt16
 
-    init(port: UInt16 = 9998) {
+    init(port: UInt16 = 9997) {
         self.port = port
     }
 
