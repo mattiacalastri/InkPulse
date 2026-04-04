@@ -104,24 +104,24 @@ struct TeamSectionView: View {
             Button(action: { withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() } }) {
                 HStack(spacing: 8) {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(team.resolvedColor.opacity(0.6))
-                        .frame(width: 12)
+                        .frame(width: 14)
 
                     Circle()
                         .fill(team.resolvedColor)
-                        .frame(width: 8, height: 8)
+                        .frame(width: 10, height: 10)
 
                     Text(team.name)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
                         .foregroundStyle(isPopover ? Color.primary : Color.white)
 
                     if teamState.totalSessions > 0 {
                         Text("\(teamState.totalSessions) active")
-                            .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundStyle(team.resolvedColor)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
                             .background(Capsule().fill(team.resolvedColor.opacity(0.12)))
                     }
                 }
@@ -135,11 +135,11 @@ struct TeamSectionView: View {
                 HStack(spacing: 8) {
                     if teamState.combinedHealth >= 0 {
                         Text("\(teamState.combinedHealth)")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
                             .foregroundStyle(healthColor(for: teamState.combinedHealth))
                     }
                     Text(String(format: "€%.2f", teamState.totalCost))
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
             }

@@ -123,14 +123,14 @@ struct AgentCardView: View {
 
             // Name
             Text(displayName)
-                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundStyle(pillar.color)
                 .lineLimit(1)
 
             // Inline status when idle
             if !isAgentActive {
                 Text(statusVerb)
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
                     .foregroundStyle(.gray)
             }
 
@@ -146,7 +146,7 @@ struct AgentCardView: View {
 
             // Health score — always visible
             Text("\(snapshot.health)")
-                .font(.system(size: isAgentActive ? 16 : 14, weight: .bold, design: .rounded))
+                .font(.system(size: isAgentActive ? 20 : 16, weight: .bold, design: .rounded))
                 .foregroundStyle(healthColor(for: snapshot.health))
 
             // Context % (only if critical)
@@ -159,10 +159,10 @@ struct AgentCardView: View {
             // Model badge (only if known)
             if modelIsKnown {
                 Text(modelShortName(snapshot.model))
-                    .font(.system(size: 7, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
                     .foregroundStyle(modelColor(snapshot.model))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
                     .background(Capsule().fill(modelColor(snapshot.model).opacity(0.12)))
             }
         }
@@ -174,7 +174,7 @@ struct AgentCardView: View {
         VStack(alignment: .leading, spacing: 4) {
             // Status verb — the story
             Text(statusVerb)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .foregroundColor(Color(hex: "#00d4aa"))
 
             // Current tool — what specifically

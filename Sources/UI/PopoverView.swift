@@ -51,11 +51,11 @@ struct PopoverView: View {
                         .font(.title2)
                         .foregroundStyle(Color(hex: "#00d4aa"))
                 }
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("InkPulse")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
                     Text(headerSubtitle)
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -203,13 +203,13 @@ struct PopoverView: View {
     // MARK: - Components
 
     private func statCell(_ label: String, _ value: String, color: Color) -> some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 3) {
             Text(value)
-                .font(.system(size: 15, weight: .bold, design: .monospaced))
+                .font(.system(size: 18, weight: .heavy, design: .monospaced))
                 .foregroundStyle(color)
             Text(label)
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.45))
         }
         .frame(maxWidth: .infinity)
     }
@@ -229,7 +229,7 @@ struct PopoverView: View {
     private func statDivider() -> some View {
         Rectangle()
             .fill(Color.primary.opacity(0.08))
-            .frame(width: 1, height: 28)
+            .frame(width: 1, height: 34)
     }
 
     private func footerButton(_ title: String, icon: String, color: Color, action: @escaping () -> Void) -> some View {
