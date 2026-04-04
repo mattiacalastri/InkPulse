@@ -113,57 +113,55 @@ struct AgentCardView: View {
     // MARK: - Identity (who is this agent?)
 
     private var cardIdentity: some View {
-        HStack(spacing: 8) {
-            // Living indicator
-            if snapshot.egiState > .dormant {
-                EGIGlyphView(state: snapshot.egiState, size: 14)
-            } else {
-                BreathingDot(color: mood.color, isActive: isAgentActive)
+        VStack(alignment: .leading, spacing: 4) {
+            // Row 1: dot + full name (never truncated)
+            HStack(spacing: 8) {
+                if snapshot.egiState > .dormant {
+                    EGIGlyphView(state: snapshot.egiState, size: 14)
+                } else {
+                    BreathingDot(color: mood.color, isActive: isAgentActive)
+                }
+
+                Text(displayName)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(pillar.color)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            // Name
-            Text(displayName)
-                .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundStyle(pillar.color)
-                .lineLimit(1)
+            // Row 2: health + context% + model + status/branch
+            HStack(spacing: 6) {
+                Text("\(snapshot.health)")
+                    .font(.system(size: isAgentActive ? 20 : 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(healthColor(for: snapshot.health))
 
-            // Inline status when idle
-            if !isAgentActive {
-                Text(statusVerb)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(.gray)
-            }
+                if snapshot.contextPercent > 0.6 {
+                    Text(String(format: "%.0f%%", snapshot.contextPercent * 100))
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(contextColor(for: snapshot.contextPercent))
+                }
 
-            // Git branch (active only)
-            if isAgentActive, let branch = gitBranch {
-                Text(branch)
-                    .font(.system(size: 8, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
+                if modelIsKnown {
+                    Text(modelShortName(snapshot.model))
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(modelColor(snapshot.model))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(modelColor(snapshot.model).opacity(0.12)))
+                }
 
-            Spacer()
+                Spacer()
 
-            // Health score — always visible
-            Text("\(snapshot.health)")
-                .font(.system(size: isAgentActive ? 20 : 16, weight: .bold, design: .rounded))
-                .foregroundStyle(healthColor(for: snapshot.health))
-
-            // Context % (only if critical)
-            if snapshot.contextPercent > 0.6 {
-                Text(String(format: "%.0f%%", snapshot.contextPercent * 100))
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundStyle(contextColor(for: snapshot.contextPercent))
-            }
-
-            // Model badge (only if known)
-            if modelIsKnown {
-                Text(modelShortName(snapshot.model))
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(modelColor(snapshot.model))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(modelColor(snapshot.model).opacity(0.12)))
+                if !isAgentActive {
+                    Text(statusVerb)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.gray)
+                } else if let branch = gitBranch {
+                    Text(branch)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
         }
     }
