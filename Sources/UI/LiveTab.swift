@@ -33,6 +33,12 @@ struct LiveTab: View {
                         .padding(.horizontal, 28).padding(.bottom, 12)
                 }
 
+                // ── QUOTA BARS ──
+                if let q = stats.quotaSnapshot {
+                    quotaSection(q)
+                        .padding(.horizontal, 28).padding(.bottom, 12)
+                }
+
                 Divider().overlay(Color(hex: "#00d4aa").opacity(0.2))
 
                 // ── ECG ──
@@ -304,6 +310,104 @@ struct LiveTab: View {
     }
 
     // MARK: - Daily Budget Bar (Feature 3)
+
+    // MARK: - Quota Section
+
+    private func quotaSection(_ q: QuotaSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("API QUOTA")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.4))
+                Spacer()
+                Text(q.plan.rawValue)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(hex: "#00d4aa"))
+            }
+
+            if let fh = q.fiveHour {
+                quotaBar(label: "Session", tier: fh)
+            }
+            if let sd = q.sevenDay {
+                quotaBar(label: "Weekly", tier: sd)
+            }
+            if let opus = q.sevenDayOpus {
+                quotaBar(label: "Opus", tier: opus)
+            }
+            if let sonnet = q.sevenDaySonnet {
+                quotaBar(label: "Sonnet", tier: sonnet)
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.white.opacity(0.02))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color(hex: "#00d4aa").opacity(0.08), lineWidth: 1)
+                )
+        )
+    }
+
+    private func quotaBar(label: String, tier: QuotaTier) -> some View {
+        let used = tier.usedPercent
+        let barColor: Color = {
+            if used < 0.60 { return Color(hex: "#00d4aa") }
+            if used < 0.80 { return Color(hex: "#FFA500") }
+            return Color(hex: "#FF4444")
+        }()
+
+        return VStack(spacing: 3) {
+            HStack {
+                Text(label)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.6))
+                Spacer()
+                Text(String(format: "%.0f%%", tier.utilization))
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(barColor)
+                if let reset = tier.resetsAt {
+                    Text(formatResetTime(reset))
+                        .font(.system(size: 9, weight: .regular, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.3))
+                }
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.white.opacity(0.06))
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(barColor)
+                        .frame(width: geo.size.width * CGFloat(min(max(used, 0), 1.0)))
+                    // Deficit indicator: red tick at 100% if over limit
+                    if used > 1.0 {
+                        Rectangle()
+                            .fill(Color(hex: "#FF4444"))
+                            .frame(width: 2, height: 8)
+                            .offset(x: geo.size.width - 1)
+                    }
+                }
+            }
+            .frame(height: 5)
+        }
+    }
+
+    private func formatResetTime(_ date: Date) -> String {
+        let delta = date.timeIntervalSince(Date())
+        if delta <= 0 { return "now" }
+        let hours = Int(delta) / 3600
+        let minutes = (Int(delta) % 3600) / 60
+        if hours >= 24 {
+            let days = hours / 24
+            let remH = hours % 24
+            return "\(days)d \(remH)h"
+        }
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+        return "\(minutes)m"
+    }
 
     private var dailyBudgetBar: some View {
         let budget = stats.config.dailyBudgetEUR

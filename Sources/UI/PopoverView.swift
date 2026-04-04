@@ -103,9 +103,13 @@ struct PopoverView: View {
                 statDivider()
                 statCell("cost", String(format: "€%.2f", stats.totalCost), color: .primary)
 
-                if let used = stats.quotaUsedDisplay, let remaining = stats.quotaRemainingPercent {
+                if let q = stats.quotaSnapshot, let fh = q.fiveHour {
                     statDivider()
-                    statCell(stats.planName ?? "plan", used, color: quotaColor(remaining))
+                    statCell("5h", String(format: "%.0f%%", fh.utilization), color: quotaColor(fh.remainingPercent))
+                    if let sd = q.sevenDay {
+                        statDivider()
+                        statCell("7d", String(format: "%.0f%%", sd.utilization), color: quotaColor(sd.remainingPercent))
+                    }
                 } else if let bp = stats.budgetPercent {
                     statDivider()
                     statCell("budget", String(format: "%.0f%%", bp * 100), color: budgetColor(bp))

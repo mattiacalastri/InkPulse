@@ -85,30 +85,129 @@ final class QuotaFetcher {
 
     // MARK: - Token Resolution
 
-    /// Reads the OAuth access token from file only. Never touches Keychain to avoid password prompts.
+    /// Keychain backoff: avoid re-prompting after failures.
+    private var keychainBackoffUntil: Date?
+
+    /// Reads the OAuth access token from file first, then macOS Keychain.
     private func resolveToken() -> String? {
         if let cached = cachedToken { return cached }
-        // File only — no Keychain access, no password prompts, ever.
+
+        // 1. Try file-based credentials (legacy, no prompt risk)
         if let fileToken = readFromFile() {
             cachedToken = fileToken
             return fileToken
         }
-        AppState.log("QuotaFetcher: no file token found — skipping Keychain to avoid password prompt")
+
+        // 2. Try macOS Keychain via /usr/bin/security (same as claude-hud)
+        if let keychainToken = readFromKeychain() {
+            cachedToken = keychainToken
+            return keychainToken
+        }
+
+        AppState.log("QuotaFetcher: no token found (file or Keychain)")
         return nil
     }
 
     private func readFromFile() -> String? {
+        let home = FileManager.default.homeDirectoryForCurrentUser
         let paths = [
-            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/.credentials.json"),
-            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/credentials.json")
+            home.appendingPathComponent(".claude/.credentials.json"),
+            home.appendingPathComponent(".claude/credentials.json")
         ]
         for path in paths {
             guard let data = try? Data(contentsOf: path),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let token = json["accessToken"] as? String ?? json["access_token"] as? String else { continue }
-            return token
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+
+            // Claude Code 2.x nested format
+            if let oauth = json["claudeAiOauth"] as? [String: Any],
+               let token = oauth["accessToken"] as? String, !token.isEmpty {
+                return token
+            }
+            // Flat format
+            if let token = json["accessToken"] as? String ?? json["access_token"] as? String, !token.isEmpty {
+                return token
+            }
         }
         return nil
+    }
+
+    /// Read OAuth token from macOS Keychain using /usr/bin/security.
+    /// Uses absolute path to avoid PATH hijacking. Times out after 3s.
+    private func readFromKeychain() -> String? {
+        // Backoff after failures to avoid repeated prompts
+        if let backoff = keychainBackoffUntil, Date() < backoff {
+            return nil
+        }
+
+        let serviceName = "Claude Code-credentials"
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = ["find-generic-password", "-s", serviceName, "-w"]
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+        // Prevent any UI interaction
+        process.environment = ["HOME": FileManager.default.homeDirectoryForCurrentUser.path]
+
+        do {
+            try process.run()
+
+            // Timeout: 3 seconds
+            let deadline = DispatchTime.now() + .seconds(3)
+            let group = DispatchGroup()
+            group.enter()
+            DispatchQueue.global().async {
+                process.waitUntilExit()
+                group.leave()
+            }
+            if group.wait(timeout: deadline) == .timedOut {
+                process.terminate()
+                AppState.log("QuotaFetcher: Keychain read timed out")
+                keychainBackoffUntil = Date().addingTimeInterval(60)
+                return nil
+            }
+
+            guard process.terminationStatus == 0 else {
+                // Not found or denied — backoff 60s
+                keychainBackoffUntil = Date().addingTimeInterval(60)
+                return nil
+            }
+
+            let outputData = stdout.fileHandleForReading.readDataToEndOfFile()
+            let raw = String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            guard !raw.isEmpty else { return nil }
+
+            // The Keychain value is a JSON string containing credentials
+            if let jsonData = raw.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                // Nested format: { claudeAiOauth: { accessToken: "..." } }
+                if let oauth = json["claudeAiOauth"] as? [String: Any],
+                   let token = oauth["accessToken"] as? String, !token.isEmpty {
+                    AppState.log("QuotaFetcher: token from Keychain (nested)")
+                    return token
+                }
+                // Flat format
+                if let token = json["accessToken"] as? String, !token.isEmpty {
+                    AppState.log("QuotaFetcher: token from Keychain (flat)")
+                    return token
+                }
+            }
+
+            // Raw token (not JSON)
+            if raw.count > 20 && !raw.contains("{") {
+                AppState.log("QuotaFetcher: token from Keychain (raw)")
+                return raw
+            }
+
+            return nil
+        } catch {
+            AppState.log("QuotaFetcher: Keychain exec failed — \(error.localizedDescription)")
+            keychainBackoffUntil = Date().addingTimeInterval(60)
+            return nil
+        }
     }
 
     // MARK: - Parse Response
