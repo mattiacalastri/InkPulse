@@ -45,12 +45,6 @@ struct LiveTab: View {
                 ecgSection
                     .padding(.horizontal, 28).padding(.vertical, 20)
 
-                Divider().overlay(Color(hex: "#00d4aa").opacity(0.2))
-
-                // ── AGENTS ──
-                agentsSection
-                    .padding(.horizontal, 28).padding(.vertical, 16)
-
                 Spacer(minLength: 0)
 
                 // ── FOOTER ──

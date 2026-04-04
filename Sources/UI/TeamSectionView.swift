@@ -30,7 +30,13 @@ struct TeamSectionView: View {
             // Role cards (when expanded)
             if isExpanded {
                 if !teamState.slots.isEmpty {
-                    HStack(spacing: 8) {
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(), spacing: 10),
+                            GridItem(.flexible(), spacing: 10)
+                        ],
+                        spacing: 10
+                    ) {
                         ForEach(teamState.slots) { slot in
                             RoleCardView(
                                 slot: slot,
@@ -60,7 +66,13 @@ struct TeamSectionView: View {
 
                 // Overflow sessions (matched team cwd but no role slot)
                 if teamState.overflowCount > 0 {
-                    HStack(spacing: 8) {
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(), spacing: 10),
+                            GridItem(.flexible(), spacing: 10)
+                        ],
+                        spacing: 10
+                    ) {
                         ForEach(teamState.overflowSessionIds, id: \.self) { sid in
                             if let snap = sessions[sid] {
                                 AgentCardView(

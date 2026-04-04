@@ -154,10 +154,10 @@ final class AppState: ObservableObject {
 
         // Format menu bar label — MenuBarExtra only updates reliably via direct Text binding
         if menuBarHealth >= 0 {
-            var label = "\u{1F419} \(menuBarHealth) · \(Int(menuBarTokenMin))t · €\(String(format: "%.2f", menuBarCost))"
-            // Show weekly quota in status bar when critical (>80%)
+            var label = "\u{1F419} €\(String(format: "%.2f", menuBarCost))"
+            // Show weekly quota when critical (>80%)
             if let sd = quotaSnapshot?.sevenDay, sd.usedPercent > 0.80 {
-                label += " · w:\(Int(sd.utilization))%"
+                label += " · \(Int(sd.utilization))% used"
             }
             menuBarLabel = label
         } else {
