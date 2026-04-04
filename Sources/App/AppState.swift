@@ -157,7 +157,7 @@ final class AppState: ObservableObject {
             var label = "\u{1F419} \(menuBarHealth) · \(Int(menuBarTokenMin))t · €\(String(format: "%.2f", menuBarCost))"
             // Show weekly quota in status bar when critical (>80%)
             if let sd = quotaSnapshot?.sevenDay, sd.usedPercent > 0.80 {
-                label += " · \(Int(sd.utilization))%w"
+                label += " · w:\(Int(sd.utilization))%"
             }
             menuBarLabel = label
         } else {

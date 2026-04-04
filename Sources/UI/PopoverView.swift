@@ -93,22 +93,22 @@ struct PopoverView: View {
 
             // ── STATS STRIP ──
             HStack(spacing: 0) {
-                statCell("tok/min", String(format: "%.0f", stats.avgTokenMin), color: .primary)
+                statCell("speed", String(format: "%.0f", stats.avgTokenMin), color: .primary)
                 statDivider()
                 statCell("peak", String(format: "%.0f", stats.peakTokenMin), color: Color(hex: "#00d4aa"))
                 statDivider()
-                statCell("cache", String(format: "%.0f%%", stats.avgCacheHit * 100), color: stats.avgCacheHit > 0.8 ? Color(hex: "#00d4aa") : Color(hex: "#FFA500"))
+                statCell("cached", String(format: "%.0f%%", stats.avgCacheHit * 100), color: stats.avgCacheHit > 0.8 ? Color(hex: "#00d4aa") : Color(hex: "#FFA500"))
                 statDivider()
-                statCell("err", String(format: "%.1f%%", stats.avgErrorRate * 100), color: stats.avgErrorRate < 0.05 ? Color(hex: "#00d4aa") : Color(hex: "#FF4444"))
+                statCell("errors", String(format: "%.1f%%", stats.avgErrorRate * 100), color: stats.avgErrorRate < 0.05 ? Color(hex: "#00d4aa") : Color(hex: "#FF4444"))
                 statDivider()
                 statCell("cost", String(format: "€%.2f", stats.totalCost), color: .primary)
 
                 if let q = stats.quotaSnapshot, let fh = q.fiveHour {
                     statDivider()
-                    statCell("5h", String(format: "%.0f%%", fh.utilization), color: quotaColor(fh.remainingPercent))
+                    statCell("5h limit", String(format: "%.0f%%", fh.utilization), color: quotaColor(fh.remainingPercent))
                     if let sd = q.sevenDay {
                         statDivider()
-                        statCell("7d", String(format: "%.0f%%", sd.utilization), color: quotaColor(sd.remainingPercent))
+                        statCell("weekly", String(format: "%.0f%%", sd.utilization), color: quotaColor(sd.remainingPercent))
                     }
                 } else if let bp = stats.budgetPercent {
                     statDivider()

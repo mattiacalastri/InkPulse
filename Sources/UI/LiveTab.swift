@@ -233,21 +233,21 @@ struct LiveTab: View {
 
     private var statsGrid: some View {
         HStack(spacing: 0) {
-            dashStat("tok/min", String(format: "%.0f", stats.avgTokenMin) + trendArrow(appState.tokenMinDelta), color: .white)
+            dashStat("speed", String(format: "%.0f", stats.avgTokenMin) + trendArrow(appState.tokenMinDelta), color: .white)
             dashDivider()
-            dashStat("peak", String(format: "%.0f", stats.peakTokenMin), color: Color(hex: "#00d4aa"))
+            dashStat("peak speed", String(format: "%.0f", stats.peakTokenMin), color: Color(hex: "#00d4aa"))
             dashDivider()
-            dashStat("cache", String(format: "%.0f%%", stats.avgCacheHit * 100), color: stats.avgCacheHit > 0.8 ? Color(hex: "#00d4aa") : Color(hex: "#FFA500"))
+            dashStat("cached", String(format: "%.0f%%", stats.avgCacheHit * 100), color: stats.avgCacheHit > 0.8 ? Color(hex: "#00d4aa") : Color(hex: "#FFA500"))
             dashDivider()
-            dashStat("err", String(format: "%.1f%%", stats.avgErrorRate * 100), color: stats.avgErrorRate < 0.05 ? Color(hex: "#00d4aa") : Color(hex: "#FF4444"))
+            dashStat("errors", String(format: "%.1f%%", stats.avgErrorRate * 100), color: stats.avgErrorRate < 0.05 ? Color(hex: "#00d4aa") : Color(hex: "#FF4444"))
             dashDivider()
             dashStat("cost", String(format: "€%.2f", stats.totalCost), color: .white)
             dashDivider()
-            dashStat("ctx", stats.avgContextPercent > 0 ? String(format: "%.0f%%", stats.avgContextPercent * 100) : "—", color: contextStatColor(stats.avgContextPercent))
+            dashStat("memory", stats.avgContextPercent > 0 ? String(format: "%.0f%%", stats.avgContextPercent * 100) : "—", color: contextStatColor(stats.avgContextPercent))
             dashDivider()
-            dashStat("subs", "\(stats.totalAgents)", color: Color(hex: "#4A9EFF"))
+            dashStat("helpers", "\(stats.totalAgents)", color: Color(hex: "#4A9EFF"))
             dashDivider()
-            dashStat("tok/agent", String(format: "%.0f", stats.throughputPerAgent), color: .white.opacity(0.7))
+            dashStat("per agent", String(format: "%.0f", stats.throughputPerAgent), color: .white.opacity(0.7))
 
             if let used = stats.quotaUsedDisplay, let remaining = stats.quotaRemainingPercent {
                 dashDivider()
@@ -326,16 +326,16 @@ struct LiveTab: View {
             }
 
             if let fh = q.fiveHour {
-                quotaBar(label: "Session", tier: fh)
+                quotaBar(label: "5h limit", tier: fh)
             }
             if let sd = q.sevenDay {
-                quotaBar(label: "Weekly", tier: sd)
+                quotaBar(label: "weekly limit", tier: sd)
             }
             if let opus = q.sevenDayOpus {
-                quotaBar(label: "Opus", tier: opus)
+                quotaBar(label: "opus model", tier: opus)
             }
             if let sonnet = q.sevenDaySonnet {
-                quotaBar(label: "Sonnet", tier: sonnet)
+                quotaBar(label: "sonnet model", tier: sonnet)
             }
         }
         .padding(.vertical, 8)
