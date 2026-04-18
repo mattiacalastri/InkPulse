@@ -81,6 +81,7 @@ struct EGIGlyphView: View {
                 .scaleEffect(glowPhase ? scaleRange : 1.0)
         }
         .frame(width: size * 1.8, height: size * 1.8)
+        .animation(.easeInOut(duration: animationDuration).repeatForever(autoreverses: true), value: glowPhase)
         .onAppear { startAnimation() }
         .onChange(of: state) { _, _ in startAnimation() }
     }
@@ -90,12 +91,7 @@ struct EGIGlyphView: View {
             glowPhase = false
             return
         }
-        withAnimation(
-            .easeInOut(duration: animationDuration)
-            .repeatForever(autoreverses: true)
-        ) {
-            glowPhase = true
-        }
+        glowPhase = true
     }
 }
 

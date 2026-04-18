@@ -26,6 +26,7 @@ struct BreathingDot: View {
                 .scaleEffect(isActive && phase ? 1.15 : 1.0)
         }
         .frame(width: 18, height: 18)
+        .animation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true), value: phase)
         .onAppear { startBreathing() }
         .onChange(of: isActive) { _, _ in startBreathing() }
     }
@@ -35,9 +36,7 @@ struct BreathingDot: View {
             phase = false
             return
         }
-        withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
-            phase = true
-        }
+        phase = true
     }
 }
 
