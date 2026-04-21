@@ -329,6 +329,15 @@ struct AgentCardView: View {
 struct AgentDetailPanel: View {
     let snapshot: MetricsSnapshot
     let cwd: String?
+    /// When non-nil, shows the "Send Task" control row.
+    /// Called with the prompt string when the user submits.
+    var onSendTask: ((String) -> Void)?
+    /// Whether this session has an active WebSocket connection to InkPulse.
+    var wsConnected: Bool = false
+
+    @State private var taskDraft: String = ""
+    @State private var taskSent = false
+    @FocusState private var taskFieldFocused: Bool
 
     private var pillar: PillarInfo { PillarInfo.from(cwd: cwd, inferredProject: snapshot.inferredProject) }
 
@@ -337,6 +346,9 @@ struct AgentDetailPanel: View {
             panelHeader
             panelStats
             panelContext
+            if onSendTask != nil {
+                sendTaskRow
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -445,6 +457,83 @@ struct AgentDetailPanel: View {
         if tokens >= 1_000_000 { return String(format: "%.1fM", Double(tokens) / 1_000_000) }
         if tokens >= 1_000 { return String(format: "%.0fK", Double(tokens) / 1_000) }
         return "\(tokens)"
+    }
+
+    // MARK: - Send Task Row
+
+    /// Compact inline task sender — visible in detail panel for WS-connected sessions.
+    private var sendTaskRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider().opacity(0.4)
+
+            HStack(spacing: 6) {
+                // WS status indicator
+                HStack(spacing: 4) {
+                    Image(systemName: wsConnected ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
+                        .font(.system(size: 8))
+                        .foregroundStyle(wsConnected ? Color(hex: "#00d4aa") : Color.secondary)
+                    Text(wsConnected ? "WS Live" : "WS Offline")
+                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(wsConnected ? Color(hex: "#00d4aa") : Color.secondary)
+                }
+
+                Spacer()
+
+                if taskSent {
+                    HStack(spacing: 3) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(Color(hex: "#00d4aa"))
+                        Text("Sent")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(Color(hex: "#00d4aa"))
+                    }
+                }
+            }
+
+            if wsConnected {
+                HStack(spacing: 6) {
+                    TextField("Send task to agent...", text: $taskDraft)
+                        .font(.system(size: 10, design: .monospaced))
+                        .textFieldStyle(.plain)
+                        .focused($taskFieldFocused)
+                        .onSubmit { submitTask() }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.primary.opacity(0.05))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(taskFieldFocused ? pillar.color.opacity(0.4) : Color.primary.opacity(0.1), lineWidth: 1)
+                                )
+                        )
+
+                    Button(action: submitTask) {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(taskDraft.isEmpty ? Color.secondary : pillar.color)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(taskDraft.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            } else {
+                Text("Start InkPulse before launching Claude to enable task sending.")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func submitTask() {
+        let prompt = taskDraft.trimmingCharacters(in: .whitespaces)
+        guard !prompt.isEmpty else { return }
+        onSendTask?(prompt)
+        taskDraft = ""
+        taskSent = true
+        taskFieldFocused = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { taskSent = false }
     }
 
     private func openTerminal() {

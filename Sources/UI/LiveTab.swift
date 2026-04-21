@@ -556,7 +556,9 @@ struct LiveTab: View {
                    let snap = stats.snaps.first(where: { $0.sessionId == expandedId }) {
                     AgentDetailPanel(
                         snapshot: snap,
-                        cwd: appState.sessionCwds[snap.sessionId]
+                        cwd: appState.sessionCwds[snap.sessionId],
+                        onSendTask: { prompt in appState.sendTask(prompt, to: snap.sessionId) },
+                        wsConnected: appState.wsServer?.connectedSessionIds.contains(snap.sessionId) ?? false
                     )
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -650,7 +652,9 @@ struct LiveTab: View {
                            let snap = stats.snaps.first(where: { $0.sessionId == expandedId }) {
                             AgentDetailPanel(
                                 snapshot: snap,
-                                cwd: appState.sessionCwds[snap.sessionId]
+                                cwd: appState.sessionCwds[snap.sessionId],
+                                onSendTask: { prompt in appState.sendTask(prompt, to: snap.sessionId) },
+                                wsConnected: appState.wsServer?.connectedSessionIds.contains(snap.sessionId) ?? false
                             )
                             .transition(.opacity.combined(with: .move(edge: .top)))
                         }
