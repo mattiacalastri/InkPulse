@@ -37,14 +37,13 @@ fi
 
 send_ws_message() {
     local payload="$1"
-    local length=${#payload}
 
-    python3 - <<PYEOF
+    python3 - "$INKPULSE_HOST" "$INKPULSE_PORT" "$payload" <<'PYEOF'
 import socket, struct, os, sys
 
-HOST = "$INKPULSE_HOST"
-PORT = $INKPULSE_PORT
-payload = b'''$payload'''
+HOST = sys.argv[1]
+PORT = int(sys.argv[2])
+payload = sys.argv[3].encode('utf-8')
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.settimeout(3)
@@ -115,31 +114,27 @@ build_status_message() {
     local tool="${2:-}"
     local target="${3:-}"
     local task="${4:-}"
-
-    # Escape quotes in strings
-    local cwd_escaped="${CWD//\"/\\\"}"
-    local tool_escaped="${tool//\"/\\\"}"
-    local target_escaped="${target//\"/\\\"}"
-    local task_escaped="${task//\"/\\\"}"
-
-    local tool_json="null"
-    [[ -n "$tool" ]] && tool_json="\"${tool_escaped}\""
-
-    local target_json="null"
-    [[ -n "$target" ]] && target_json="\"${target_escaped}\""
-
-    local task_json="null"
-    [[ -n "$task" ]] && task_json="\"${task_escaped}\""
-
-    cat <<JSON
-{"type":"status","data":{"session_id":"${SESSION_ID}","cwd":"${cwd_escaped}","state":"${state}","current_tool":${tool_json},"current_target":${target_json},"task":${task_json}}}
-JSON
+    python3 -c "
+import json, sys
+d = {'type':'status','data':{
+    'session_id': sys.argv[1],
+    'cwd':        sys.argv[2],
+    'state':      sys.argv[3],
+    'current_tool':   sys.argv[4] or None,
+    'current_target': sys.argv[5] or None,
+    'task':           sys.argv[6] or None,
+}}
+print(json.dumps(d))
+" "$SESSION_ID" "$CWD" "$state" "$tool" "$target" "$task" 2>/dev/null \
+    || echo '{"type":"status","data":{"state":"working"}}'
 }
 
 build_heartbeat_message() {
-    cat <<JSON
-{"type":"heartbeat","data":{"session_id":"${SESSION_ID}"}}
-JSON
+    python3 -c "
+import json, sys
+print(json.dumps({'type':'heartbeat','data':{'session_id': sys.argv[1]}}))
+" "$SESSION_ID" 2>/dev/null \
+    || echo '{"type":"heartbeat","data":{}}'
 }
 
 # ── Handle hook events ────────────────────────────────────────────────────────

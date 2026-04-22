@@ -67,7 +67,7 @@ session_start = hooks.setdefault("SessionStart", [])
 
 start_cmd = {
     "type": "command",
-    "command": f"bash {hook_path} SessionStart"
+    "command": f'bash "{hook_path}" SessionStart'
 }
 
 already_has = any(
@@ -87,7 +87,7 @@ pre_tool = hooks.setdefault("PreToolUse", [])
 
 pretool_cmd = {
     "type": "command",
-    "command": f"bash {hook_path} PreToolUse"
+    "command": f'bash "{hook_path}" PreToolUse'
 }
 
 already_has_pre = any(
@@ -107,7 +107,7 @@ stop_hook = hooks.setdefault("Stop", [])
 
 stop_cmd = {
     "type": "command",
-    "command": f"bash {hook_path} Stop"
+    "command": f'bash "{hook_path}" Stop'
 }
 
 already_has_stop = any(
